@@ -6,6 +6,9 @@
 var View3D = (function () {
   var T = null, R = null, scene = null, cam = null, canvas = null;
   var on = false, failed = false, built = false, wide = false;
+  // full = the whole kitchen is 3D (stations are models): the wide PC layout, or the first-person
+  // simulator on any screen. fpsOn = the camera is the player's eyes.
+  var full = false, fpsOn = false;
   var W = 720, H = 800;              // canvas size in stage px
   var rest = { pos: null, look: null };      // gameplay camera
   var pose = { pos: null, look: null };      // animated camera (wide)
@@ -15,24 +18,31 @@ var View3D = (function () {
   var props = null, propsKey = '';   // location + decor props
   var anim = [];                     // props with an idle animation
   var lanterns = [];                 // { mat, halo }
-  var custSpr = {}, staffSpr = {}, stSpr = [], stShadow = [], titleSpr = [];
+  var custSpr = {}, staffSpr = {}, stObj = [], titleSpr = [];
+  // height of each station model (for a station 1 unit wide): where its labels go
+  var MODEL_H = { grill: 0.74, jus: 0.72, frites: 0.6, pizza: 1.0, soupe: 0.62, wok: 0.55, sushi: 0.42, gateau: 0.72 };
   var steam = [];
   var parts = null;
   var V1 = null, V2 = null, V3 = null, V4 = null;
   // quality: 2 = shadows + full resolution, 1 = no shadows, 0 = no shadows + half resolution.
   // It only goes down, when the computer cannot keep up (see govern()).
   var quality = 2, gov = { last: 0, sum: 0, n: 0, until: 0, warned: false };
-  var COUNTER_TOP = 1.2, Z_CUST = -1.15, Z_STAFF = 2.1, Z_BACK = -18;
+  var COUNTER_TOP = 1.2, Z_CUST = -1.15, Z_STAFF = 2.1, Z_BACK = -18, ENV = 0.5;
   // wide layout (world units)
   var WD = { zSt: 4.35, wtTop: 0.92, zStaff: 3.5, pitch: 1.2, unit: 0.004, custHalf: 5, postX: 8, geo: [], counterY: 660, zBack: -21 };
   var TITLE = { pos: [-3.3, 3.7, 10.6], look: [-2.5, 2.05, 0] };
 
   // ---------------- support & textures ----------------
+  // WebGL available? Asked once: every test creates a context, and a browser only keeps a few of them
+  var sup = null;
   function supported() {
+    if (sup !== null) return sup;
     try {
-      var c = document.createElement('canvas');
-      return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl')));
-    } catch (e) { return false; }
+      var c = document.createElement('canvas'), gl = window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'));
+      sup = !!gl;
+      if (gl) { var lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); }
+    } catch (e) { sup = false; }
+    return sup;
   }
   function usable() { return !!(App.save && App.save.view3d) && !failed && !!window.THREE && supported(); }
 
@@ -172,6 +182,13 @@ var View3D = (function () {
     pose.pos = new T.Vector3(0, 4.6, 12.5); pose.look = new T.Vector3(0, 1.9, 0);
 
     M.hemi = new T.HemisphereLight(0xfff6e8, 0x6a4a30, 1.15); scene.add(M.hemi);
+    // reflections: a small studio "room" lights the metal, glass and copper of the models
+    try {
+      var pm = new T.PMREMGenerator(R);
+      scene.environment = pm.fromScene(new T.RoomEnvironment(), 0.04).texture;
+      scene.environmentIntensity = ENV;
+      pm.dispose();
+    } catch (e) { console.warn(e); }
     M.sun = new T.DirectionalLight(0xffffff, 1.9);
     M.sun.position.set(-6, 11, 8);
     M.sun.castShadow = true;
@@ -187,7 +204,7 @@ var View3D = (function () {
     M.backW = new T.Mesh(new T.PlaneGeometry(16, 9), new T.MeshBasicMaterial({ color: 0xffffff }));
     M.backW.position.z = WD.zBack; M.backW.visible = false;
     scene.add(M.backW);
-    M.floorK = mesh(new T.PlaneGeometry(70, 16), new T.MeshStandardMaterial({ map: tileTex(), roughness: 0.9 }), 0, 0, 8.6, false);
+    M.floorK = mesh(new T.PlaneGeometry(70, 17.2), new T.MeshStandardMaterial({ map: tileTex(), roughness: 0.9 }), 0, 0, 8.0, false);
     M.floorK.rotation.x = -Math.PI / 2; M.floorK.receiveShadow = true; scene.add(M.floorK);
 
     // the counter: wooden body, light top, dark trim and planks on the kitchen side
@@ -208,11 +225,11 @@ var View3D = (function () {
     wg.add(mesh(new T.BoxGeometry(36.3, 0.07, 1.28), std(0x5a3418), 0, WD.wtTop - 0.125, WD.zSt + 0.02, false));
     M.wide = wg; wg.visible = false; scene.add(wg);
     for (var s = 0; s < 8; s++) {
-      var id = GD.STATIONS[s].id;
-      var sh = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: blobTex(), transparent: true, depthWrite: false, opacity: 0.6 }));
-      sh.rotation.x = -Math.PI / 2; sh.renderOrder = 1; wg.add(sh); stShadow.push(sh);
-      var sp = new T.Sprite(new T.SpriteMaterial({ map: tex('st_' + id), transparent: true, alphaTest: 0.06 }));
-      sp.center.set(0.5, 0); sp.renderOrder = 2; wg.add(sp); stSpr.push(sp);
+      var id = GD.STATIONS[s].id, holder = new T.Group();
+      var mdl = Models.station(id), crate = Models.prop('lockbox');
+      holder.add(mdl.group); holder.add(crate);
+      wg.add(holder);
+      stObj.push({ holder: holder, model: mdl, crate: crate, h: MODEL_H[id] || 0.7 });
     }
     for (var q = 0; q < 18; q++) {
       var pf = new T.Sprite(new T.SpriteMaterial({ map: softTex(), transparent: true, depthWrite: false, opacity: 0 }));
@@ -221,14 +238,196 @@ var View3D = (function () {
     }
 
     props = new T.Group(); scene.add(props);
+    buildRoom();
     built = true;
+  }
+
+  // ---------------- first person: the room around the kitchen and the outside ----------------
+  // Seen only from inside (hidden for the fixed camera): roof, walls, furniture, lamps, the ground
+  // outside with a terrace, a striped awning and a very wide painted horizon.
+  var AWN = { jungle: ['#fff6e6', '#d8392b'], plage: ['#ffffff', '#2a8ccc'], montagne: ['#f4f8ff', '#2e7d4f'], ville: ['#f6edff', '#7b4bc4'] };
+  function buildRoom() {
+    var g = new T.Group(); M.room = g; g.visible = false; scene.add(g);
+    var st = new T.Group(); g.add(st);                    // everything that never changes: merged below
+    function plane(w, h, mat, x, y, z, rx, ry, to) {
+      var m = new T.Mesh(new T.PlaneGeometry(w, h), mat); m.position.set(x, y, z); m.rotation.set(rx || 0, ry || 0, 0); (to || st).add(m); return m;
+    }
+    function put(id, x, y, z, ry, sc) {
+      var o = Models.prop(id); o.position.set(x, y, z); o.rotation.y = ry || 0; if (sc) o.scale.setScalar(sc); st.add(o); return o;
+    }
+    var wl = { h: 30, s: 48, l: 56, n: 5, seed: 17, rep: [9, 1] }, ws = { h: 30, s: 48, l: 56, n: 5, seed: 17, rep: [3.5, 1] };
+    M.roofM = std(0xffffff, { map: woodTex('roof', { h: 26, s: 46, l: 38, n: 6, seed: 41, rep: [8, 3] }), roughness: 0.9 });
+    M.wallM = std(0xffffff, { map: woodTex('wall', wl), roughness: 0.85 });
+    M.wallS = std(0xffffff, { map: woodTex('wallS', ws), roughness: 0.85 });
+    plane(17, 7.4, M.roofM, 0, 4.3, 2.0, Math.PI / 2, 0);              // roof (seen from below)
+    plane(17, 4.4, M.wallM, 0, 2.15, 5.25, 0, Math.PI);                // back wall
+    plane(6.6, 4.4, M.wallS, -7.8, 2.15, 2.2, 0, Math.PI / 2);         // left wall
+    plane(6.6, 4.4, M.wallS, 7.8, 2.15, 2.2, 0, -Math.PI / 2);         // right wall
+    var beamM = std(0xffffff, { map: woodTex('post', { h: 25, s: 48, l: 40, n: 2, seed: 31, rep: [2, 3] }) });
+    for (var x = -6; x <= 6; x += 3) st.add(mesh(new T.BoxGeometry(0.2, 0.26, 7.2), beamM, x, 4.14, 2.0, false));
+    st.add(mesh(new T.BoxGeometry(17, 0.34, 0.3), beamM, 0, 4.05, -1.0, false));
+    st.add(mesh(new T.BoxGeometry(17, 0.22, 0.16), beamM, 0, 0.11, 5.2, false));
+    [-7.7, 7.7].forEach(function (px) { st.add(mesh(new T.BoxGeometry(0.3, 4.3, 0.3), beamM, px, 2.15, -1.0, false)); });
+    var pack = Models.khas('wall_panel');          // the props of the pack "Kitchen & Diner 3D" are in the build
+    function kp(name, x, y, z, ry, sc) { return Models.kput(st, name, x, y, z, ry, sc); }
+    // a shelf on the back wall; items: [name, x, turn, scale, lift] standing on the board
+    function shelfAt(sx, y, items) {
+      var sh = new T.Group(); sh.position.set(sx, y, 5.0); sh.rotation.y = Math.PI; st.add(sh);
+      sh.add(Models.prop('shelfBare'));
+      items.forEach(function (it) { Models.kput(sh, it[0], it[1], 0.025 + (it[4] || 0), 0.04, it[2] || 0, it[3] || 1); });
+    }
+    if (pack) {
+      // retro wall panels and a checker floor (one piece = 2 m = 2.5 units)
+      for (var i = 0; i < 7; i++) {
+        kp('wall_panel', -7.5 + i * 2.5, 0, 5.2, Math.PI);
+        for (var r = 0; r < 2; r++) kp('floor_checker', -7.5 + i * 2.5, 0.004, 1.85 + r * 2.5, 0);
+      }
+      [-1, 1].forEach(function (sd) {
+        for (var j = 0; j < 3; j++) { var wp = kp('wall_panel', sd * 7.75, 0, j * 2.2, -sd * Math.PI / 2); if (wp) wp.scale.x *= 0.88; }
+      });
+      shelfAt(-4.2, 2.75, [['kettle', -0.5, 0.5], ['toaster', 0.04, 0], ['mug', 0.5, 0.7], ['mug', 0.68, -0.5]]);
+      shelfAt(0, 2.75, [['pot', -0.5, 0], ['frying_pan', 0.02, 0.25], ['plate', 0.62, 0], ['plate', 0.62, 0, 1, 0.03], ['plate', 0.62, 0, 1, 0.06]]);
+      shelfAt(4.2, 2.75, [['rolling_pin', -0.45, 0.2], ['salt_pepper', 0.02, 0], ['mustard_bottle', 0.28, 0], ['ketchup_bottle', 0.4, 0], ['mug', 0.66, 1.3]]);
+      put('shelf', -4.2, 3.5, 5.03, Math.PI); put('shelf', 4.2, 3.5, 5.03, Math.PI);
+      // left end: two cabinets around the back door, with the microwave and a little snack
+      kp('counter_base', -7.36, 0, 3.3, Math.PI / 2); kp('microwave', -7.36, 1.15, 3.3, Math.PI / 2);
+      kp('counter_base', -7.36, 0, 1.12, Math.PI / 2);
+      kp('plate', -7.34, 1.15, 0.98, 0); kp('donut', -7.34, 1.17, 0.98, 0.4, 1.5); kp('mug', -7.3, 1.15, 1.34, 2.2);
+    } else {
+      [-4.2, 0, 4.2].forEach(function (sx, k) {
+        put('shelf', sx, 2.75, 5.05, Math.PI);
+        if (k !== 1) put('shelf', sx, 3.45, 5.05, Math.PI);
+      });
+      put('crate', -7.25, 0, 3.3, Math.PI / 2, 1.6); put('crate', -7.2, 0.5, 3.32, Math.PI / 2, 1.3);
+      put('sacks', -7.3, 0, 1.0, 0.4);
+    }
+    [-4.2, 0, 4.2].forEach(function (sx) { put('lamp', sx, 4.25, 2.2); });
+    put('menuboard', -2.1, 3.3, 5.16, Math.PI, 0.95);
+    put('clock', 0, 3.62, 5.16, Math.PI);
+    put('potrack', 2.1, 4.26, 4.05);
+    put('knives', 6.3, 2.7, 5.15, Math.PI);
+    // right end: fridge and sink.  left wall: the back door
+    put('fridge', 7.26, 0, 3.05, -Math.PI / 2, 1.25);
+    put('sink', 7.4, 0, 1.6, -Math.PI / 2, 1.08);
+    put('door', -7.7, 0, 2.15, Math.PI / 2);
+    // outside: the ground, a terrace, the horizon
+    M.groundM = new T.MeshStandardMaterial({ color: 0x5e8f3a, roughness: 1, map: Models.speckle([70, 10]) });
+    plane(340, 50, M.groundM, 0, -0.02, -25.4, -Math.PI / 2, 0);
+    var canopy = [0xe8433a, 0x2a8ccc, 0xffb300, 0x43b047];
+    [[-4.5, -5.4], [4.2, -6.2], [-9.5, -9.5], [9.5, -8.6], [0.5, -11.5], [-15, -7], [15, -7.5]].forEach(function (p, k) {
+      var t;
+      if (pack && k < 4) {             // the nearest tables: diner table and chairs of the pack under the parasol
+        t = Models.prop('parasolTop');
+        Models.kput(t, 'diner_table', 0, 0, 0, 0);
+        Models.kput(t, 'kitchen_chair', 0, 0, -0.86, 0); Models.kput(t, 'kitchen_chair', 0, 0, 0.86, Math.PI);
+        if (k % 2) Models.kput(t, 'mug', 0.3, 0.95, 0.15, 1); else { Models.kput(t, 'plate', -0.3, 0.95, -0.1, 0); Models.kput(t, 'burger', -0.3, 0.97, -0.1, 0, 1.3); }
+      } else t = Models.prop('parasol');
+      var top = new T.Mesh(new T.ConeGeometry(1.6, 0.6, 10), std(canopy[k % 4], { roughness: 0.8, side: T.DoubleSide }));
+      top.position.y = 3.5; t.add(top);
+      t.position.set(p[0], 0, p[1]); t.rotation.y = k * 1.3;
+      st.add(t);
+    });
+    if (pack) [[-1.6, -3.9], [7.4, -4.4]].forEach(function (p, k) {      // tall tables with the bar stools
+      var t = Models.prop('standTable');
+      for (var q = 0; q < 3; q++) Models.kput(t, 'bar_stool', Math.cos(q * 2.1 + k) * 0.85, 0, Math.sin(q * 2.1 + k) * 0.85, 0);
+      Models.kput(t, 'fries_basket', 0.12, 1.35, 0.05, 0.5, 1.3); Models.kput(t, 'ketchup_bottle', -0.18, 1.35, -0.1, 0); Models.kput(t, 'mustard_bottle', -0.24, 1.35, 0.06, 0);
+      t.position.set(p[0], 0, p[1]);
+      st.add(t);
+    });
+    Models.bake(st);
+    g.traverse(function (o) { if (o.isMesh) o.castShadow = false; });
+    // the awning in front of the roof: it also hides the top edge of the painted horizon
+    M.awnM = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: T.DoubleSide });
+    var aw = new T.Mesh(new T.BoxGeometry(36, 0.04, 2.5), M.awnM); aw.position.set(0, 3.97, -2.2); aw.rotation.x = -0.225; g.add(aw);
+    var val = new T.Mesh(new T.PlaneGeometry(36, 0.36), M.awnM); val.position.set(0, 3.52, -3.42); g.add(val);
+    M.backF = new T.Mesh(new T.PlaneGeometry(323, 26), new T.MeshBasicMaterial({ color: 0xffffff }));
+    M.backF.position.set(0, 4.6, -34);
+    g.add(M.backF);
+    M.fpsLamp = new T.PointLight(0xffe2b0, 5, 11, 1.7); M.fpsLamp.position.set(0, 3.5, 2.2); g.add(M.fpsLamp);
+    // the helpers' legs (their bust is a picture) and the tray the player carries
+    M.body = {};
+    ['commis', 'waiter'].forEach(function (k) {
+      var b = Models.prop(k === 'waiter' ? 'bodyWaiter' : 'bodyCook');
+      b.traverse(function (o) { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.castShadow = false; } });
+      b.visible = false; scene.add(b); M.body[k] = b;
+    });
+    // the tray the player carries: a little scene of its own, drawn after the kitchen (always in front)
+    M.trayScene = new T.Scene(); M.trayCam = new T.PerspectiveCamera(40, 1, 0.05, 20);
+    M.trayScene.environment = scene.environment; M.trayScene.environmentIntensity = 0.55;
+    M.trayScene.add(new T.HemisphereLight(0xffffff, 0x9a7a5a, 1.25));
+    var tl = new T.DirectionalLight(0xfff3e0, 1.7); tl.position.set(-1.2, 3, 2); M.trayScene.add(tl);
+    var tr = Models.prop('tray');
+    tr.traverse(function (o) { if (o.isMesh) o.castShadow = o.receiveShadow = false; });
+    M.trayDish = [];
+    for (var di = 0; di < 3; di++) { var hold = new T.Group(); hold.userData.key = ''; tr.add(hold); M.trayDish.push(hold); }
+    tr.rotation.x = 0.46; tr.visible = false;
+    M.tray = tr; M.trayK = 0; M.dishCache = {};
+    M.trayScene.add(tr);
+  }
+  // a dish for the tray: a small 3D model, or its picture when there is no model
+  function trayDish(id) {
+    var c = M.dishCache[id];
+    if (c === undefined) {
+      c = Models.dish(id);
+      if (c) c.traverse(function (o) { if (o.isMesh) o.castShadow = o.receiveShadow = false; });
+      M.dishCache[id] = c || null;
+    }
+    if (c) return c.clone();
+    var sp = new T.Sprite(new T.SpriteMaterial({ map: tex('dish_' + id), transparent: true }));
+    sp.center.set(0.5, 0.1); sp.scale.set(0.36, 0.36, 1);
+    return sp;
+  }
+  // the outside follows the current restaurant
+  function dressRoom(loc) {
+    M.groundM.color.setHex({ jungle: 0x5a9a3c, plage: 0xf0d79c, montagne: 0xf2f6fb, ville: 0x8d8494 }[loc.id] || 0x5a9a3c);
+    var key = 'bgw_' + loc.id + '@mirror';
+    if (!texCache[key]) {
+      var src = tex('bgw_' + loc.id), t = src.clone();
+      t.wrapS = T.MirroredRepeatWrapping; t.repeat.set(7, 1); t.colorSpace = T.SRGBColorSpace;
+      t.userData = { ready: true };
+      var ok = function () { t.image = src.image; t.needsUpdate = true; };
+      if (src.image) ok(); else { var iv = setInterval(function () { if (src.image) { clearInterval(iv); ok(); } }, 200); }
+      texCache[key] = t;
+    }
+    M.backF.material.map = texCache[key]; M.backF.material.needsUpdate = true;
+    var w = WOODS[loc.id] || WOODS.jungle, a = AWN[loc.id] || AWN.jungle;
+    M.roofM.color.setHex(w[0]); M.wallM.color.setHex(w[1]); M.wallS.color.setHex(w[1]);
+    M.awnM.map = Models.stripes(a[0], a[1], [24, 1]); M.awnM.needsUpdate = true;
+  }
+  // the tray comes up when the player carries something
+  function syncTray(fp, dt) {
+    if (!M.tray) return;
+    var n = fp && fp.carry ? fp.carry.length : 0;
+    M.trayK += ((n ? 1 : 0) - M.trayK) * Math.min(1, dt * 9);
+    M.tray.visible = !!fp && M.trayK > 0.02;
+    if (!M.tray.visible) return;
+    var k = App.wide ? 0.62 : 0.42;
+    M.tray.scale.setScalar(k);
+    M.tray.position.set(0, -0.45 - (1 - M.trayK) * 0.5 + (fp.bob || 0) * 0.5, -1.6);
+    for (var i = 0; i < 3; i++) {
+      var d = fp.carry[i], h = M.trayDish[i], key = d ? d.dish : '';
+      if (h.userData.key !== key) {
+        while (h.children.length) h.remove(h.children[0]);
+        if (key) h.add(trayDish(key));
+        h.userData.key = key;
+      }
+      h.position.set((i - (n - 1) / 2) * 0.32, 0.02, 0);
+    }
+  }
+  function drawTray() {
+    if (!M.tray || !M.tray.visible) return;
+    if (M.trayCam.aspect !== W / H) { M.trayCam.aspect = W / H; M.trayCam.updateProjectionMatrix(); }
+    R.autoClear = false;
+    R.clearDepth();
+    R.render(M.trayScene, M.trayCam);
+    R.autoClear = true;
   }
 
   // ---------------- camera helpers ----------------
   function project(v, out) {
     V3.copy(v).project(cam);
     out = out || {};
-    out.x = (V3.x + 1) / 2 * W; out.y = (1 - V3.y) / 2 * H;
+    out.x = (V3.x + 1) / 2 * W; out.y = (1 - V3.y) / 2 * H; out.z = V3.z;      // z > 1: behind the camera
     return out;
   }
   function worldAt(sx, sy, z, out) {
@@ -239,6 +438,7 @@ var View3D = (function () {
     return out.copy(cam.position).addScaledVector(V1, t);
   }
   function setRestCamera() {
+    cam.fov = 36;
     cam.position.copy(rest.pos);
     cam.lookAt(rest.look);
     cam.updateMatrixWorld(); cam.updateProjectionMatrix();
@@ -283,23 +483,26 @@ var View3D = (function () {
     cam.updateProjectionMatrix();
     rest.pos.set(0, 4.6, 12.5); rest.look.set(0, 1.9, 0);
     setRestCamera();
-    var half = Math.abs(worldAt(64, H * 0.78, WD.zSt, V2).x);
-    WD.pitch = Math.min(1.36, half * 2 / 8);
-    WD.unit = WD.pitch * 0.9 / 300;
-    WD.custHalf = Math.abs(worldAt(250, H * 0.4, Z_CUST, V2).x);
-    WD.postX = Math.abs(worldAt(30, H * 0.45, 0.35, V2).x);
+    if (App.wide) {
+      var half = Math.abs(worldAt(64, H * 0.78, WD.zSt, V2).x);
+      WD.pitch = Math.min(1.36, half * 2 / 8);
+      WD.k = Math.min(1.2, WD.pitch / 1.08);          // size of the station models
+      WD.custHalf = Math.abs(worldAt(250, H * 0.4, Z_CUST, V2).x);
+      WD.postX = Math.abs(worldAt(30, H * 0.45, 0.35, V2).x);
+    } else {
+      // first-person view on a phone: the fixed camera is not used, the kitchen keeps comfortable sizes
+      WD.pitch = 1.25; WD.k = 1.12; WD.custHalf = 4.4; WD.postX = 6.5;
+    }
+    WD.kStaff = project(V2.set(1, 1.4, WD.zStaff)).x - W / 2;      // screen px per unit at the staff's depth
     WD.counterY = project(V2.set(0, COUNTER_TOP + 0.07, -0.66)).y;
     WD.geo = [];
     for (var i = 0; i < 8; i++) {
-      var sz = imgSize('st_' + GD.STATIONS[i].id, 300, 230);
-      var x = (i - 3.5) * WD.pitch, w = sz[0] * WD.unit, h = sz[1] * WD.unit;
+      var x = (i - 3.5) * WD.pitch, w = WD.k, h = stObj[i].h * WD.k;
       var b = project(V2.set(x, WD.wtTop, WD.zSt)), t = project(V2.set(x, WD.wtTop + h, WD.zSt));
       var e = project(V2.set(x + WD.pitch / 2, WD.wtTop, WD.zSt));
       WD.geo.push({ x: x, w: w, h: h, sx: b.x, base: b.y, top: t.y, pw: (e.x - b.x) * 2, ph: b.y - t.y });
-      stSpr[i].position.set(x, WD.wtTop + 0.03, WD.zSt);
-      stSpr[i].userData.w = w; stSpr[i].userData.h = h;
-      stShadow[i].position.set(x, WD.wtTop + 0.035, WD.zSt + 0.1);
-      stShadow[i].scale.set(w * 1.25, 0.62, 1);
+      stObj[i].holder.position.set(x, WD.wtTop + 0.03, WD.zSt);
+      stObj[i].holder.scale.setScalar(WD.k);
     }
     // backdrop: the top ~57 % of the 16:9 picture sits between the top of the view and the counter
     var tl = worldAt(-80, -30, WD.zBack, V2).clone(), br = worldAt(W + 80, WD.counterY + 30, WD.zBack, V4);
@@ -311,7 +514,7 @@ var View3D = (function () {
     propsKey = '';
     gov.sum = 0; gov.n = 0; gov.until = performance.now() + 1500;
   }
-  function fit() { if (wide) fitWide(); else fitPortrait(); }
+  function fit() { if (full) fitWide(); else fitPortrait(); }
 
   // ---------------- location & decor props ----------------
   function clearProps() {
@@ -393,9 +596,11 @@ var View3D = (function () {
   function addWeather(loc, spanX, topY) {
     var pk = loc.id === 'montagne' ? 'snow' : (loc.id === 'jungle' || loc.id === 'ville') ? 'fire' : null;
     if (!pk) return;
-    var n = Math.round((pk === 'snow' ? 260 : 46) * spanX / 16), pos = new Float32Array(n * 3), seed = [];
+    // first person: it snows outside, not in the kitchen
+    var z0 = fpsOn ? -15 : -6, zr = fpsOn ? 13.4 : 9;
+    var n = Math.round((pk === 'snow' ? 260 : 46) * spanX / 16 * (fpsOn ? 1.6 : 1)), pos = new Float32Array(n * 3), seed = [];
     for (var q = 0; q < n; q++) {
-      pos[q * 3] = (Math.random() - 0.5) * spanX; pos[q * 3 + 1] = Math.random() * topY; pos[q * 3 + 2] = -6 + Math.random() * 9;
+      pos[q * 3] = (Math.random() - 0.5) * spanX; pos[q * 3 + 1] = Math.random() * topY; pos[q * 3 + 2] = z0 + Math.random() * zr;
       seed.push(Math.random() * 10);
     }
     var geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
@@ -411,15 +616,17 @@ var View3D = (function () {
   var WOODS = { jungle: [0xffffff, 0xffffff], plage: [0xffe9c4, 0xfff6e2], montagne: [0xcfb39a, 0xe9e2da], ville: [0x8a7f9a, 0xd9d3e6] };
   function buildProps() {
     var s = App.save, d = s.decor, loc = GD.locById(s.loc || 'jungle');
-    var key = (wide ? 'W' : 'P') + loc.id + '|' + JSON.stringify(d) + '|' + W + 'x' + H + '|' + (s.name || '');
+    var key = (fpsOn ? 'F' : full ? 'W' : 'P') + loc.id + '|' + JSON.stringify(d) + '|' + W + 'x' + H + '|' + (s.name || '') + '|' + GD.seatsFor(s) + (s.flags && s.flags.trophy ? 'T' : '');
     if (key === propsKey) return;
     propsKey = key;
     clearProps();
     setRestCamera();
     R.setClearColor(new T.Color(loc.sky), 1);
-    M.back.visible = !wide; M.backW.visible = wide; M.wide.visible = wide;
+    M.back.visible = !full; M.backW.visible = full && !fpsOn; M.wide.visible = full;
+    M.room.visible = fpsOn;
+    if (fpsOn) dressRoom(loc);
     M.cBody.material.color.setHex(WOODS[loc.id][0]); M.cTop.material.color.setHex(WOODS[loc.id][1]);
-    if (wide) propsWide(s, d, loc); else propsPortrait(s, d, loc);
+    if (full) propsWide(s, d, loc); else propsPortrait(s, d, loc);
   }
 
   function propsPortrait(s, d, loc) {
@@ -454,6 +661,7 @@ var View3D = (function () {
     addLanterns(d.lanternes ? 3 + d.lanternes * 2 : loc.id === 'ville' ? 9 : 0, !d.lanternes, -px, px, topY - 0.1, 0.6, 0.5);
     addPlants(px - 0.75, d);
     addCounterBits(px - 0.45, -px + 0.6);
+    if (s.flags && s.flags.trophy) { var tro = Models.prop('trophy'); tro.position.set(px - 1.5, COUNTER_TOP + 0.07, 0.42); tro.scale.setScalar(1.3); props.add(tro); }
     if (d.musique) {
       var dr = new T.Mesh(new T.PlaneGeometry(1.2, 1.04), new T.MeshStandardMaterial({ map: texSvg('drums', Art.drums(), 4), transparent: true, alphaTest: 0.4 }));
       dr.position.set(-px + 1.2, worldAt(80, L.counterTop - 330, -2.5).y, -2.5);
@@ -485,19 +693,42 @@ var View3D = (function () {
       props.add(mesh(new T.CylinderGeometry(0.3, 0.3, 0.16, 16), std(0x5a3418), x, COUNTER_TOP + 0.16, 0.35, false));    // ring where the post meets the counter
     });
     if (loc.id === 'montagne') props.add(mesh(new T.BoxGeometry(34.4, 0.08, 1.2), std(0xffffff, { roughness: 1 }), 0, COUNTER_TOP + 0.1, -0.05, false));
-    var lanY = worldAt(W / 2, 150, 0.6, V2).y;
-    addLanterns(d.lanternes ? 5 + d.lanternes * 4 : loc.id === 'ville' ? 15 : 0, !d.lanternes, -px - 0.4, px + 0.4, lanY, 0.6, 0.5);
+    var lanY = fpsOn ? 3.95 : worldAt(W / 2, 150, 0.6, V2).y;
+    addLanterns(d.lanternes ? 5 + d.lanternes * 4 : loc.id === 'ville' ? 15 : 0, !d.lanternes, -px - 0.4, px + 0.4, lanY, fpsOn ? -1.3 : 0.6, fpsOn ? 0.4 : 0.5);
     // objects on the counter only where no customer sits: next to the posts when there is room
     var n = GD.seatsFor(s), cg = custGeo(n), edge = (n - 1) / 2 * cg.sp + cg.h * 0.3;
     addPlants(px - 0.62, d);
     if (px - 1.5 > edge) addCounterBits(px - 1.25, -px + 1.4);
+    // between two customers: the till, a bell, the sauces and the tip jar
+    var mids = [], items = ['register', 'bell', 'bottles', 'tipjar', 'snack'];
+    for (var j = 0; j < n - 1; j++) mids.push((j - (n - 2) / 2) * cg.sp);
+    if (!mids.length) mids = [1.7, -1.7];
+    var reg = Math.floor(mids.length / 2), other = 1;
+    mids.forEach(function (mx, j) {
+      var id = j === reg ? 'register' : items[other++ % items.length], o, y = COUNTER_TOP + 0.07;
+      if ((id === 'bottles' || id === 'snack') && Models.khas('plate')) {
+        // sauces, salt and pepper / a doughnut and a slice of pie on show (pack "Kitchen & Diner 3D")
+        o = new T.Group();
+        if (id === 'bottles') { Models.kput(o, 'ketchup_bottle', -0.12, 0, 0, 0, 1.25); Models.kput(o, 'mustard_bottle', 0.02, 0, 0.03, 0, 1.25); Models.kput(o, 'salt_pepper', 0.24, 0, 0, 0.3, 1.25); }
+        else { Models.kput(o, 'plate', -0.2, 0, 0, 0, 1.1); Models.kput(o, 'donut', -0.2, 0.03, 0, 0.5, 1.7); Models.kput(o, 'pie_slice', 0.22, 0, 0.02, -0.6, 1.25); }
+        o.position.set(mx, y, 0.26); o.rotation.y = Math.PI;
+      } else {
+        o = Models.prop(id === 'snack' ? 'bell' : id);
+        if (id === 'register') { o.position.set(mx, y, 0.3); o.rotation.y = Math.PI; o.scale.setScalar(0.86); }
+        else { o.position.set(mx, y, id === 'bell' ? -0.32 : -0.22); o.rotation.y = Math.PI; o.scale.setScalar(1.15); }
+      }
+      props.add(o);
+    });
+    if (s.flags && s.flags.trophy) {       // the golden toque offered by a gift code
+      var tro = Models.prop('trophy'); tro.position.set(mids[reg] + 0.62, COUNTER_TOP + 0.07, 0.3); tro.scale.setScalar(1.25); props.add(tro);
+    }
     if (d.musique) {
       var dr = new T.Mesh(new T.PlaneGeometry(1.5, 1.3), new T.MeshStandardMaterial({ map: texSvg('drums', Art.drums(), 4), transparent: true, alphaTest: 0.4 }));
       dr.position.set(-px + 1.6, COUNTER_TOP + 0.72, 0.1);
       dr.castShadow = true;
       props.add(dr);
     }
-    if (loc.id === 'jungle' || loc.id === 'plage') {
+    if (!fpsOn && (loc.id === 'jungle' || loc.id === 'plage')) {
       var ly = worldAt(W / 2, 40, 1.2, V2).y;
       addLeaves(Math.abs(worldAt(0, 60, 1.2, V2).x) - 0.9, ly - 0.2);
     }
@@ -525,6 +756,26 @@ var View3D = (function () {
     return { sp: sp, h: 2.9 * Math.min(1, Math.max(0.78, sp / 2.2)) };
   }
   function seatWorldX(seat, n) { return (seat - (n - 1) / 2) * custGeo(n).sp; }
+  // size of a customer: big busts behind the counter for the view from above; in first person they have
+  // the size of the helpers and stand on a simple body (the bust picture stops at the chest)
+  function custDim(n) { return fpsOn ? { h: 1.02, base: 1.3 } : { h: custGeo(n).h, base: 0.55 }; }
+  // colour of the clothes: the average of the bottom of the bust picture
+  var shirtCol = {};
+  function shirtColor(key) {
+    if (shirtCol[key]) return shirtCol[key];
+    var im = tex(key).image;
+    if (!im || !im.naturalWidth) return null;
+    var c = new T.Color(0x7d8fa3);
+    try {
+      var cv = document.createElement('canvas'); cv.width = 16; cv.height = 8;
+      var g = cv.getContext('2d');
+      g.drawImage(im, im.naturalWidth * 0.2, im.naturalHeight * 0.8, im.naturalWidth * 0.6, im.naturalHeight * 0.13, 0, 0, 16, 8);
+      var d = g.getImageData(0, 0, 16, 8).data, r = 0, gg = 0, b = 0, k = 0;
+      for (var i = 0; i < d.length; i += 4) if (d[i + 3] > 110) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; k++; }
+      if (k) c.setRGB(r / k / 255, gg / k / 255, b / k / 255, T.SRGBColorSpace);
+    } catch (e) { }
+    return (shirtCol[key] = c);
+  }
   function domFor(x, topY, out) {
     var ty = project(V2.set(x, topY, Z_CUST), tmp).y, px = tmp.x;
     var line = project(V2.set(x, COUNTER_TOP + 0.07, -0.66), tmp).y;
@@ -533,8 +784,9 @@ var View3D = (function () {
     return out;
   }
   function seatScreen(seat, n) {
-    if (!built || !wide) return { x: 0, top: 0, sc: 1 };
-    return domFor(seatWorldX(seat, n), 0.55 + custGeo(n).h, { x: 0, top: 0, sc: 1 });
+    if (!built || !full) return { x: 0, top: 0, sc: 1 };
+    var cd = custDim(n);
+    return domFor(seatWorldX(seat, n), cd.base + cd.h, { x: 0, top: 0, sc: 1 });
   }
   function syncCustomers(st) {
     var CU = st.CU, L = st.L, seen = {};
@@ -546,11 +798,25 @@ var View3D = (function () {
       var s = custSpr[id];
       if (!s) { s = custSpr[id] = spriteFor(key); scene.add(s); }
       setSpriteKey(s, key);
-      if (wide) {
-        var hw = custGeo(n).h, xw = seatWorldX(c.seat, n);
+      var body = s.userData.body;
+      if (body) body.visible = false;
+      if (full) {
+        var cd = custDim(n), hw = cd.h, xw = seatWorldX(c.seat, n), dy = (u.y || 0) / 224 * hw;
         s.scale.set(hw * 0.75, hw, 1);
-        s.position.set(xw, 0.55 - (u.y || 0) / 224 * hw, Z_CUST);
-        s.userData.top = 0.55 + hw; s.userData.x = xw;
+        s.position.set(xw, cd.base - dy, Z_CUST);
+        s.userData.top = cd.base + hw; s.userData.x = xw;
+        if (fpsOn) {
+          if (!body) {
+            body = s.userData.body = new T.Mesh(new T.CylinderGeometry(0.27, 0.31, 0.9, 18), new T.MeshStandardMaterial({ color: 0x7d8fa3, roughness: 0.85, transparent: true }));
+            body.scale.z = 0.62; body.userData.key = '';
+            scene.add(body);
+          }
+          var bk = 'cu_' + c.animal + '_neutral';
+          if (body.userData.key !== bk) { var sc0 = shirtColor(bk); if (sc0) { body.material.color.copy(sc0); body.userData.key = bk; } }
+          body.visible = true;
+          body.position.set(xw, cd.base - 0.37 - dy, Z_CUST);
+          body.material.opacity = u.op == null ? 1 : u.op;
+        }
       } else {
         // place the billboard where the 2D layout puts the customer (with the camera at rest)
         var sc2 = n >= 5 ? 0.82 : n === 4 ? 0.93 : 1;
@@ -564,22 +830,40 @@ var View3D = (function () {
       s.material.opacity = u.op == null ? 1 : u.op;
       s.visible = s.material.map.userData.ready !== false;
     });
-    Object.keys(custSpr).forEach(function (id) { if (!seen[id]) { scene.remove(custSpr[id]); custSpr[id].material.dispose(); delete custSpr[id]; } });
+    Object.keys(custSpr).forEach(function (id) {
+      if (seen[id]) return;
+      var o = custSpr[id], b = o.userData.body;
+      if (b) { scene.remove(b); b.geometry.dispose(); b.material.dispose(); }
+      scene.remove(o); o.material.dispose(); delete custSpr[id];
+    });
   }
-  function syncStaff(st) {
+  function syncStaff(st, fp) {
     var CH = st.CH, idx = 0;
+    if (M.body) { M.body.commis.visible = false; M.body.waiter.visible = false; }
     Object.keys(CH).forEach(function (k) {
       var o = CH[k];
       var vis = o.el.style.display !== 'none';
       var s = staffSpr[k];
       if (!s) { s = staffSpr[k] = spriteFor(o.key || 'chef_happy'); scene.add(s); }
+      if (fpsOn && k === 'chef') vis = false;         // first person: the player is the chef
       s.visible = vis;
       idx++;
       if (!vis) return;
       setSpriteKey(s, o.key || 'chef_happy');
       var cls = o.el.className, bob = 0, work = cls.indexOf('work') >= 0 ? 1 + Math.sin(time * 22) * 0.015 : 1;
       if (cls.indexOf('walk') >= 0) bob = Math.abs(Math.sin(time * 20)) * 0.07;
-      if (wide) {
+      s.material.opacity = 1;
+      if (fp) {
+        // first person: the helpers walk in two lanes (along the worktop / along the counter). Their bust
+        // is a picture standing on 3D legs; they fade when the player walks through them.
+        var lane = k === 'waiter' ? 1.0 : 3.34, fx = (o.x - W / 2) / (WD.kStaff || 200), hb = 1.1;
+        var dd = Math.sqrt((fp.x - fx) * (fp.x - fx) + (fp.z - lane) * (fp.z - lane)), op = Math.max(0.06, Math.min(1, (dd - 0.45) / 0.7));
+        s.scale.set(hb * (o.w / o.h), hb * work, 1);
+        s.position.set(fx, 1.13 + bob * 0.5, lane);
+        s.material.opacity = op;
+        var bd = M.body[k];
+        if (bd) { bd.visible = true; bd.position.set(fx, 0, lane); bd.traverse(function (m) { if (m.isMesh) m.material.opacity = op; }); }
+      } else if (full) {
         var ks = Math.max(0.86, Math.min(1.06, 0.55 + 0.4 * WD.pitch));
         var hw = (k === 'chef' ? 2.08 : 1.8) * ks, z = WD.zStaff - idx * 0.04;
         var wx = worldAt(o.x, H * 0.7, z, V2).x;
@@ -597,22 +881,19 @@ var View3D = (function () {
   function syncStations(st, dt) {
     var save = App.save, now = performance.now();
     for (var i = 0; i < 8; i++) {
-      var o = st.ST[i], sp = stSpr[i], g = WD.geo[i];
+      var o = st.ST[i], S = stObj[i], g = WD.geo[i];
       if (!g) continue;
-      var owned = (save.stations[o.def.id] || 0) > 0, can = save.level >= o.def.unlock;
+      var owned = (save.stations[o.def.id] || 0) > 0;
       var cooking = !!(st.sh && st.sh.stations[i].cooking.length);
       var hv = o.hover && (owned || st.mode === 'hub') ? 1 : 0;
       o.hv = (o.hv || 0) + (hv - (o.hv || 0)) * Math.min(1, dt * 14);
       var bump = o.bumpT ? Math.max(0, 1 - (now - o.bumpT) / 260) : 0;
-      var k = 1 + o.hv * 0.07 + Math.sin(bump * Math.PI) * 0.1;
-      var wob = cooking ? Math.sin(time * 13 + i) * 0.018 : 0;
-      sp.scale.set(g.w * k * (1 + wob), g.h * k * (1 - wob), 1);
-      sp.position.y = WD.wtTop + 0.03 + o.hv * 0.03;
-      var c = owned ? 1 : can ? 0.42 : 0.13;
-      sp.material.opacity = owned ? 1 : can ? 0.96 : 0.9;
-      sp.material.color.setRGB(c, c, owned ? 1 : c * 1.12);
-      sp.visible = sp.material.map.userData.ready !== false;
-      stShadow[i].material.opacity = owned ? 0.6 : 0.25;
+      var k = WD.k * (1 + o.hv * 0.06 + Math.sin(bump * Math.PI) * 0.09);
+      S.holder.scale.setScalar(k);
+      S.holder.position.y = WD.wtTop + 0.03 + o.hv * 0.03;
+      S.holder.rotation.y = fpsOn ? Math.PI : 0;      // first person: the player stands on the other side
+      S.model.group.visible = owned; S.crate.visible = !owned;
+      if (owned) S.model.tick(dt, time + i * 1.3, { cooking: cooking });
       if (cooking && Math.random() < dt * 4) puff(g);
     }
     for (var q = 0; q < steam.length; q++) {
@@ -664,6 +945,12 @@ var View3D = (function () {
       if (!s) return;
       domFor(s.userData.x, s.userData.top, dm);
       var x = dm.x, sc = dm.sc, top = dm.top;
+      var vis = !fpsOn || (tmp.z < 1 && x > -200 && x < W + 200 && sc < 8);
+      if (u.vis !== vis) { u.vis = vis; u.el.style.visibility = vis ? '' : 'hidden'; }
+      if (!vis) return;
+      // first person: the box follows the bust, but the bubble and the name keep a readable size
+      var inv = fpsOn ? Math.min(1, 1.15 / sc) : 1;
+      if (u.inv !== inv) { u.inv = inv; u.el.style.setProperty('--inv', inv.toFixed(3)); }
       if (u.left !== x || u.top !== top || u.sc !== sc) {
         u.left = x; u.top = top; u.sc = sc;
         u.el.style.left = x.toFixed(1) + 'px';
@@ -671,15 +958,25 @@ var View3D = (function () {
         u.el.style.transform = 'scale(' + sc.toFixed(3) + ')';
       }
     });
-    if (!wide) return;
+    if (!full) return;
     for (var i = 0; i < 8; i++) {
       var o = st.ST[i], g = WD.geo[i];
       if (!g) continue;
-      var b = project(V2.set(g.x, WD.wtTop, WD.zSt), tmp), bx = b.x, by = b.y;
-      if (Math.abs((o.sx || 0) - bx) > 0.25 || Math.abs((o.sy || 0) - by) > 0.25) {
-        o.sx = bx; o.sy = by;
+      var b = project(V2.set(g.x, WD.wtTop, WD.zSt), tmp), bx = b.x, by = b.y, k = 1, show = true;
+      if (fpsOn) {
+        // first person: the label gets bigger when the player comes closer, and hides behind his back
+        var front = b.z < 1, dist = Math.sqrt((g.x - cam.position.x) * (g.x - cam.position.x) + (WD.zSt - cam.position.z) * (WD.zSt - cam.position.z));
+        var tp = project(V2.set(g.x, WD.wtTop + g.h, WD.zSt), tmp);
+        k = Math.max(0.3, Math.min(1.5, (by - tp.y) / g.ph));
+        show = front && tp.z < 1 && dist < 7.5 && bx > -150 && bx < W + 150;
+      }
+      if (o.vis !== show) { o.vis = show; o.el.style.visibility = show ? '' : 'hidden'; }
+      if (!show) continue;
+      if (Math.abs((o.sx || 0) - bx) > 0.25 || Math.abs((o.sy || 0) - by) > 0.25 || o.sk !== k) {
+        o.sx = bx; o.sy = by; o.sk = k;
         o.el.style.left = (bx - g.pw / 2).toFixed(1) + 'px';
         o.el.style.top = (by - g.ph).toFixed(1) + 'px';
+        o.el.style.transform = k === 1 ? '' : 'scale(' + k.toFixed(3) + ')';
       }
     }
   }
@@ -699,8 +996,10 @@ var View3D = (function () {
     M.sun.color.copy(C1).lerp(C2, eve * 0.75);
     M.sun.intensity = mix(2.0, 1.15, eve);
     M.sun.position.set(mix(-7, 7, dayP), mix(10, 6, eve), 8);
-    M.hemi.intensity = mix(1.2, 0.85, eve);
-    (wide ? M.backW : M.back).material.color.setRGB(1, mix(1, 0.86, eve), mix(1, 0.74, eve));
+    M.hemi.intensity = mix(0.95, 0.68, eve);
+    scene.environmentIntensity = ENV * mix(1, 0.72, eve);
+    (full ? M.backW : M.back).material.color.setRGB(1, mix(1, 0.86, eve), mix(1, 0.74, eve));
+    if (M.backF) M.backF.material.color.copy(M.backW.material.color);
     var glow = 0.5 + eve * 1.8 + Math.sin(time * 3) * 0.08;
     lanterns.forEach(function (l) { l.mat.emissiveIntensity = glow; l.halo.opacity = 0.12 + eve * 0.5; });
     if (M.lampL) M.lampL.intensity = lanterns.length ? 2 + eve * 10 : 0;
@@ -767,6 +1066,9 @@ var View3D = (function () {
     }
     on = want;
     wide = on && !!App.wide;
+    if (!on) fpsOn = false;
+    full = on && (wide || fpsOn);
+    document.getElementById('app').classList.toggle('s3d', full);
     if (root) {
       root.classList.toggle('v3d-on', on);
       // the canvas goes first: bubbles, name tags, stations and HUD stay above the 3D picture
@@ -780,17 +1082,24 @@ var View3D = (function () {
     var title = App.screen === 'title';
     if ((title && !wide) || (window.Story && Story.active()) || (window.World && World.isOpen())) return;
     time += dt;
-    var st = Scene.v3dState();
+    var st = Scene.v3dState(), fp = fpsOn && window.Fps && Fps.active() ? Fps.cam() : null;
     try {
       govern();
       buildProps();
       setRestCamera();
       syncCustomers(st);
-      syncStaff(st);
-      if (wide) { syncStations(st, dt); syncTitle(title); }
+      syncStaff(st, fp);
+      if (full) { syncStations(st, dt); syncTitle(title && wide); }
+      syncTray(fp, dt);
       lighting(st, title);
       animate(dt);
-      if (wide) {
+      if (fp) {
+        // first person: the camera is the player's eyes
+        cam.fov = fp.fov; cam.updateProjectionMatrix();
+        cam.position.set(fp.x, fp.y, fp.z);
+        cam.rotation.order = 'YXZ';
+        cam.rotation.set(fp.pitch, fp.yaw, 0);
+      } else if (wide) {
         // cinematic camera: glides between the title pose and the kitchen, follows the mouse a little
         var mx = App.mx || 0, my = App.my || 0;
         var k = Math.min(1, 1 - Math.exp(-dt * 2.4));
@@ -811,6 +1120,7 @@ var View3D = (function () {
       }
       cam.updateMatrixWorld();
       R.render(scene, cam);
+      drawTray();
       if (!title) syncDom(st);
     } catch (e) {
       console.error(e);
@@ -822,10 +1132,23 @@ var View3D = (function () {
   function layout() { if (on && built) { try { fit(); } catch (e) { console.error(e); } } }
   function refresh() { propsKey = ''; }
   // snap the camera (no glide), e.g. right after the layout changed
+  // first-person simulator on / off (the layout is computed again: the whole kitchen becomes 3D)
+  function setFps(v) {
+    v = !!v && on;
+    if (v === fpsOn) return;
+    fpsOn = v;
+    propsKey = '';
+    if (App.relayout) App.relayout(); else apply();
+  }
   function snap() { if (built && wide) { pose.pos.copy(App.screen === 'title' ? V4.set(TITLE.pos[0], TITLE.pos[1], TITLE.pos[2]) : rest.pos); pose.look.copy(App.screen === 'title' ? V4.set(TITLE.look[0], TITLE.look[1], TITLE.look[2]) : rest.look); } }
   return {
     apply: apply, frame: frame, layout: layout, refresh: refresh, snap: snap, supported: supported, usable: usable,
     active: function () { return on; }, isWide: function () { return wide; }, failed: function () { return failed; },
-    metrics: function () { return WD; }, seatScreen: seatScreen, quality: function () { return quality; }
+    metrics: function () { return WD; }, seatScreen: seatScreen, quality: function () { return quality; },
+    isFull: function () { return full; }, isFps: function () { return fpsOn; }, setFps: setFps,
+    _info: function () { return R ? { calls: R.info.render.calls, tris: R.info.render.triangles, geos: R.info.memory.geometries, tex: R.info.memory.textures } : null; },
+    seatX: function (seat, n) { return seatWorldX(seat, n); },
+    // screen x (at the fixed camera) used by the scene to move the staff to a world position
+    staffSx: function (wx) { return W / 2 + wx * (WD.kStaff || 200); }
   };
 })();

@@ -28,6 +28,8 @@ var Progress = (function () {
   function applyResult(save, sh) {
     var prev = save.days[sh.day] || 0;
     var newStars = Math.max(0, sh.stars - prev);
+    // every star ever won (the world ranking keeps them after a prestige)
+    save.stats.starsAll = Math.max(save.stats.starsAll || 0, G.achValue(save, 'stars')) + newStars;
     var bonus = newStars * Math.round(sh.goal * 0.15);
     save.coins += bonus;
     if (sh.stars > prev) save.days[sh.day] = sh.stars;

@@ -74,10 +74,10 @@ var App = { save: null, W: 720, H: 1280, scale: 1, wide: false, screen: 'title',
     if (App.save) {
       Game.update(dt);
       // passive business income
-      var rate = GD.passiveRate(App.save);
+      var real = App.real || App.save, rate = GD.passiveRate(real);
       if (rate > 0) {
         passiveAcc += rate / 60 * dt;
-        if (passiveAcc >= 1) { var whole = Math.floor(passiveAcc); passiveAcc -= whole; App.save.coins += whole; }
+        if (passiveAcc >= 1) { var whole = Math.floor(passiveAcc); passiveAcc -= whole; real.coins += whole; }
       }
       saveT += dt;
       if (saveT > 10) { saveT = 0; Store.save(App.save); if (Scene.mode() === 'hub') Scene.refreshHud(); }
@@ -90,6 +90,7 @@ var App = { save: null, W: 720, H: 1280, scale: 1, wide: false, screen: 'title',
     if (UI.back()) return true;
     if (World.isOpen()) { World.close(); return true; }
     if (Tuto.blocking()) return true;
+    if (window.Fps && Fps.isFree()) { Fps.stop(); return true; }        // end of a visit of the kitchen
     if (App.screen === 'game') {
       if (Game.shift() && !Game.shift().over) { Game.pause(); return true; }
       Game.toTitle(); return true;
@@ -113,11 +114,12 @@ var App = { save: null, W: 720, H: 1280, scale: 1, wide: false, screen: 'title',
     App.visible = true;
     Sfx.resume();
     last = 0;
-    if (App.save && hiddenAt && Date.now() - hiddenAt > 60000) {
-      var amt = Progress.offlineEarnings(App.save, Date.now());
-      if (amt > 0) { App.save.coins += amt; UI.offline(amt, Math.round(Math.min(GD.OFFLINE_CAP_H * 60, (Date.now() - hiddenAt) / 60000))); }
+    var real = App.real || App.save;
+    if (real && hiddenAt && Date.now() - hiddenAt > 60000) {
+      var amt = Progress.offlineEarnings(real, Date.now());
+      if (amt > 0) { real.coins += amt; UI.offline(amt, Math.round(Math.min(GD.OFFLINE_CAP_H * 60, (Date.now() - hiddenAt) / 60000))); }
     }
-    if (App.save) App.save.lastSeen = Date.now();
+    if (real) real.lastSeen = Date.now();
     setTimeout(function () { Updater.poke(); }, 1500);     // back in the game: look for a new version
   }
 
@@ -143,6 +145,8 @@ var App = { save: null, W: 720, H: 1280, scale: 1, wide: false, screen: 'title',
     var key = e.key || '', code = e.code || '', low = key.toLowerCase();
     if (key === 'F11') { if (Platform.kind === 'desktop') { UI.setFullscreen(!Platform.isFullscreen()); e.preventDefault(); } return; }
     if (key === 'Escape') { back(); e.preventDefault(); return; }
+    // first-person simulator: its own keys (walking is read from the physical keys by Fps itself)
+    if (window.Fps && Fps.active() && !UI.isBlocking() && !Tuto.blocking() && !Story.active()) { Fps.key(e); return; }
     if (e.repeat) return;
     var go = key === 'Enter' || key === ' ' || code === 'Space';
     if (Story.active()) { if (go) { Story.next(); e.preventDefault(); } return; }
@@ -169,6 +173,8 @@ var App = { save: null, W: 720, H: 1280, scale: 1, wide: false, screen: 'title',
     else if (low === 'c') { Sfx.play('click'); Story.openJournal(); }
     else if (low === 'n') { Sfx.play('click'); UI.levels(); }
     else if (low === 'm' && Scene.E.mapBtn.style.display !== 'none') { Sfx.play('click'); World.open(); }
+    else if (low === 'v') { Scene.toggleSim(); }
+    else if (low === 'k') { Sfx.play('click'); Club.open(); }
   }
 
   function neutralinoReady() {

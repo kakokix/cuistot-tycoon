@@ -457,6 +457,68 @@ var Art = (function () {
       '<path d="M50 26 V80" ' + S(3.5) + '/>');
   };
 
+  // ---------------- CLUB ICONS (100x100) ----------------
+  ICON.trophy = function () {
+    return svg(100, 100, shadow(50, 93, 26, 5) +
+      '<path d="M22 22 H10 Q8 44 28 48 M78 22 H90 Q92 44 72 48" fill="none" ' + S(7) + '/><path d="M22 22 H10 Q8 44 28 48 M78 22 H90 Q92 44 72 48" fill="none" stroke="#f4a300" stroke-width="3.5" stroke-linecap="round"/>' +
+      '<rect x="42" y="58" width="16" height="18" fill="#e39a10" ' + S() + '/><rect x="28" y="74" width="44" height="14" rx="5" fill="#8b5a2b" ' + S() + '/>' +
+      '<path d="M22 12 H78 V34 Q78 62 50 62 Q22 62 22 34 Z" fill="url(#tg)" ' + S() + '/>' +
+      '<polygon points="' + star5(50, 34, 13, 5.6) + '" fill="#fff6c0" stroke="#c77a00" stroke-width="2.5" stroke-linejoin="round"/>' + hl('M30 20 Q30 40 38 50', 4, 0.6),
+      lg('tg', ['#fff07a', '#f4a300']));
+  };
+  ICON.gift = function () {
+    return svg(100, 100, shadow(50, 93, 32, 5) +
+      '<rect x="16" y="44" width="68" height="46" rx="6" fill="url(#gb)" ' + S() + '/><rect x="10" y="30" width="80" height="20" rx="6" fill="#ff6b5e" ' + S() + '/>' +
+      '<rect x="42" y="30" width="16" height="60" fill="#ffd23a" ' + S(3) + '/>' +
+      '<path d="M50 30 Q30 4 20 16 Q14 28 50 30 Q70 4 80 16 Q86 28 50 30 Z" fill="#ffd23a" ' + S() + '/>' + hl('M20 38 H36', 4, 0.6),
+      lg('gb', ['#f0503e', '#c0392b']));
+  };
+  ICON.target = function () {
+    return svg(100, 100, shadow(50, 94, 30, 5) +
+      '<circle cx="48" cy="52" r="38" fill="#fff" ' + S() + '/><circle cx="48" cy="52" r="28" fill="#e8433a" ' + S(3) + '/><circle cx="48" cy="52" r="17" fill="#fff" ' + S(3) + '/><circle cx="48" cy="52" r="7" fill="#e8433a" ' + S(3) + '/>' +
+      '<path d="M48 52 L84 16" ' + S(7) + '/><path d="M48 52 L84 16" stroke="#ffd23a" stroke-width="3.5" stroke-linecap="round"/>' +
+      '<path d="M74 12 L88 12 L88 26 L80 20 Z" fill="#43b047" ' + S(3) + '/>');
+  };
+  ICON.list = function () {
+    var r = '';
+    for (var i = 0; i < 3; i++) r += '<rect x="26" y="' + (28 + i * 20) + '" width="13" height="13" rx="3" fill="' + (i < 2 ? '#5cc23a' : '#fff') + '" ' + S(2.5) + '/><path d="M46 ' + (35 + i * 20) + ' H74" ' + S(4, '#b8936a') + '/>';
+    return svg(100, 100, shadow(50, 94, 30, 5) +
+      '<rect x="14" y="10" width="72" height="80" rx="8" fill="#fff6dc" ' + S() + '/><rect x="34" y="4" width="32" height="16" rx="6" fill="#8b5a2b" ' + S(3) + '/>' + r +
+      '<path d="M28 33 L32 37 L38 29 M28 53 L32 57 L38 49" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>');
+  };
+  ICON.ticket = function () {
+    return svg(100, 100, shadow(50, 92, 34, 5) +
+      '<g transform="rotate(-12 50 50)"><path d="M8 30 H92 V44 Q84 50 92 56 V70 H8 V56 Q16 50 8 44 Z" fill="url(#tk)" ' + S() + '/>' +
+      '<path d="M64 32 V68" stroke="' + OL + '" stroke-width="3" stroke-dasharray="5 5"/>' +
+      '<text x="38" y="58" font-family="Arial,sans-serif" font-weight="900" font-size="22" text-anchor="middle" fill="#7a3d00">ABC</text>' +
+      '<polygon points="' + star5(78, 50, 9, 4) + '" fill="#fff6c0" stroke="#c77a00" stroke-width="2"/></g>',
+      lg('tk', ['#ffe680', '#f4a300']));
+  };
+  ICON.chart = function () {
+    return svg(100, 100, shadow(50, 93, 34, 5) +
+      '<rect x="12" y="12" width="76" height="76" rx="10" fill="#fff6dc" ' + S() + '/>' +
+      '<rect x="24" y="54" width="13" height="24" rx="2" fill="#4fa3e0" ' + S(2.5) + '/><rect x="43" y="40" width="13" height="38" rx="2" fill="#5cc23a" ' + S(2.5) + '/><rect x="62" y="24" width="13" height="54" rx="2" fill="#f4a300" ' + S(2.5) + '/>');
+  };
+  ICON.toque = function () {
+    return svg(100, 100, shadow(50, 93, 28, 5) +
+      '<path d="M28 60 Q8 56 14 36 Q20 20 36 26 Q42 8 58 12 Q72 14 72 28 Q90 26 88 44 Q86 58 72 60 V84 H28 Z" fill="url(#tq)" ' + S() + '/>' +
+      '<path d="M28 70 H72" ' + S(3, '#c77a00') + '/><path d="M40 60 V72 M50 58 V72 M60 60 V72" stroke="#c77a00" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>' + hl('M22 40 Q24 30 34 30', 4, 0.7),
+      lg('tq', ['#fff7a0', '#f4a300']));
+  };
+  ICON.chef = function () {
+    return svg(100, 100, shadow(50, 94, 28, 5) +
+      '<path d="M20 92 Q20 66 50 66 Q80 66 80 92 Z" fill="#fff" ' + S() + '/><circle cx="50" cy="50" r="19" fill="#f2c79a" ' + S() + '/>' +
+      '<path d="M32 38 Q18 36 22 22 Q26 10 38 16 Q44 4 56 8 Q66 10 66 18 Q80 16 78 30 Q76 38 68 38 V44 H32 Z" fill="#fff" ' + S() + '/>' +
+      '<circle cx="43" cy="51" r="2.6" fill="' + OL + '"/><circle cx="57" cy="51" r="2.6" fill="' + OL + '"/><path d="M42 59 Q50 66 58 59" fill="none" ' + S(3) + '/>' +
+      '<path d="M44 68 L50 76 L56 68" fill="#e8433a" ' + S(3) + '/>');
+  };
+  ICON.walk = function () {
+    return svg(100, 100, shadow(50, 94, 26, 5) +
+      '<circle cx="56" cy="18" r="11" fill="#f2c79a" ' + S() + '/>' +
+      tube('M54 34 L46 60 L30 84', 9, '#2e3340') + tube('M46 60 L64 72 L66 90', 9, '#2e3340') +
+      tube('M54 32 L50 58', 13, '#fff') + tube('M54 38 L34 46', 7, '#fff') + tube('M56 38 L76 50', 7, '#fff'));
+  };
+
   // ---------------- PUBLIC API (cached data URIs) ----------------
   function get(key, fn) { if (!cache[key]) cache[key] = enc(fn()); return cache[key]; }
   return {

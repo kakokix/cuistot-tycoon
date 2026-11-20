@@ -7,8 +7,11 @@ var Shift = (function () {
     opts = opts || {};
     this.save = save;
     this.day = day;
-    this.cfg = GDx.dayConfig(day, save.mode);
+    this.cfg = opts.cfg || GDx.dayConfig(day, save.mode);
     this.relax = this.cfg.relax;          // Détente: nobody leaves angry, ready dishes are served automatically
+    // first-person "simulator" day: the player carries the dishes to the counter by hand
+    this.manual = !!opts.manual;
+    this.challenge = !!opts.challenge;    // daily challenge: same kitchen and same customers for everybody
     this.loc = GDx.locById(save.loc || 'jungle');
     this.closing = false; this.closingT = 0;
     this.rng = opts.rng || Math.random;
@@ -18,9 +21,15 @@ var Shift = (function () {
     this.timeLeft = this.duration;
     this.t = 0;
     this.earned = 0; this.tips = 0; this.served = 0; this.lost = 0; this.xp = 0; this.vips = 0;
+    this.dishes = [0, 0, 0, 0, 0, 0, 0, 0]; this.boostUsed = 0;      // counted for the missions of the day
     this.maxHearts = 5; this.hearts = 5;
     this.goal = this.cfg.goal;
     this.thresholds = this.cfg.stars;
+    if (this.manual && !opts.cfg) {       // walking takes time: lower goals, more patient customers
+      var mg = GDx.MANUAL_GOAL || 0.6;
+      this.goal = Math.max(10, Math.round(this.goal * mg / 5) * 5);
+      this.thresholds = this.thresholds.map(function (v) { return Math.max(10, Math.round(v * mg / 5) * 5); });
+    }
     var self = this;
     this.stations = GDx.STATIONS.map(function (def, i) {
       var lvl = save.stations[def.id] || 0;
@@ -60,7 +69,7 @@ var Shift = (function () {
       items.push({ st: si, dish: this.stations[si].def.dish, done: false });
     }
     var plants = (this.save.decor.plantes || 0);
-    var maxP = (11 + 6 * k) * cfg.patience * (1 + 0.12 * plants);
+    var maxP = (11 + 6 * k) * cfg.patience * (1 + 0.12 * plants) * (this.manual ? 1.7 : 1);
     // the same person never stands twice at the counter
     var present = {};
     for (var q = 0; q < this.customers.length; q++) present[this.customers[q].animal] = 1;
@@ -133,7 +142,7 @@ var Shift = (function () {
     }
     // staff
     this.staffTick(dt);
-    if (this.relax) this.autoServe();
+    if (this.relax && !this.manual) this.autoServe();
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
       if (this.relax && !this.tutorial) {
@@ -156,7 +165,7 @@ var Shift = (function () {
 
   P.staffTick = function (dt) {
     var lv = this.save.staff, S = GDx.STAFF;
-    if (lv.serveur > 0 && !this.relax) {
+    if (lv.serveur > 0 && (!this.relax || this.manual)) {
       this.staffT.serveur -= dt;
       if (this.staffT.serveur <= 0) {
         var done = false;
@@ -183,7 +192,7 @@ var Shift = (function () {
 
   // demand minus supply per station
   P.needs = function () {
-    var n = this.stations.map(function (s) { return -(s.cooking.length + s.ready); });
+    var n = this.stations.map(function (s) { return -(s.cooking.length + s.ready + (s.held || 0)); });
     for (var i = 0; i < this.customers.length; i++) {
       var c = this.customers[i];
       if (c.state !== 'wait' && c.state !== 'in') continue;
@@ -220,7 +229,7 @@ var Shift = (function () {
     }
     if (!best) return false;
     bestItem.done = true;
-    st.ready--;
+    st.ready--; this.dishes[si]++;
     this.emit('serve', { st: st, c: best, item: bestItem, by: by || 'chef' });
     if (this.tutorial) this.tutoServed = true;
     var all = true;
@@ -244,6 +253,7 @@ var Shift = (function () {
     this.earned += total; this.tips += tip; this.served++;
     var xp = (3 + 2 * c.items.length) * mul;
     this.xp += xp;
+    // (the daily challenge runs on a temporary save: nothing of it reaches the real one)
     this.save.coins += total;
     this.save.stats.served++; this.save.stats.earned += total;
     if (c.vip) { this.vips++; this.save.stats.vip = (this.save.stats.vip || 0) + 1; }
@@ -275,6 +285,39 @@ var Shift = (function () {
     return 'busy';
   };
 
+  // ---- first-person actions: take a ready dish from a station, hand a dish to a customer ----
+  P.takeDish = function (si) {
+    var st = this.stations[si];
+    if (this.over || !st || !st.owned || st.ready <= 0) return null;
+    st.ready--; st.held = (st.held || 0) + 1;      // held: on the player's tray, still counted as "on its way"
+    this.emit('take', { st: st });
+    return { st: si, dish: st.def.dish };
+  };
+  P.putBack = function (si) { var st = this.stations[si]; if (st) { st.ready++; st.held = Math.max(0, (st.held || 0) - 1); } };
+  // true when the customer was waiting for this dish
+  P.giveDish = function (c, si) {
+    if (this.over || !c || c.state !== 'wait') return false;
+    for (var j = 0; j < c.items.length; j++) {
+      var it = c.items[j];
+      if (!it.done && it.st === si) {
+        it.done = true; this.dishes[si]++;
+        this.stations[si].held = Math.max(0, (this.stations[si].held || 0) - 1);
+        this.emit('serve', { st: this.stations[si], c: c, item: it, by: 'player' });
+        if (this.tutorial) this.tutoServed = true;
+        var all = true;
+        for (var k = 0; k < c.items.length; k++) if (!c.items[k].done) { all = false; break; }
+        if (all) this.pay(c);
+        return true;
+      }
+    }
+    return false;
+  };
+  P.wants = function (c, si) {
+    if (!c || c.state !== 'wait') return false;
+    for (var j = 0; j < c.items.length; j++) if (!c.items[j].done && c.items[j].st === si) return true;
+    return false;
+  };
+
   P.tapCustomer = function (seat) {
     if (this.over) return 0;
     var c = this.seats[seat];
@@ -299,7 +342,7 @@ var Shift = (function () {
       if (!any && this.hearts >= this.maxHearts) return false;
       if (this.hearts < this.maxHearts) this.hearts++;
     } else if (id === 'temps') { this.timeLeft += 15; this.duration += 15; }
-    this.save.boosters[id]--;
+    this.save.boosters[id]--; this.boostUsed++;
     this.emit('booster', { id: id });
     return true;
   };

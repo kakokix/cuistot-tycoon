@@ -86,6 +86,9 @@ var Store = (function () {
     });
   }
   function save(s) {
+    // during the daily challenge App.save is a temporary kitchen: only the real save is ever written
+    if (window.App && App.real) s = App.real;
+    if (!s || s.__defi) return;
     s.lastSeen = Date.now();
     var raw = JSON.stringify(s);
     try {
@@ -105,6 +108,7 @@ var Store = (function () {
   }
   // save and wait until it is really written (before reloading the page for an update)
   function saveNow(s) {
+    if (window.App && App.real) s = App.real;
     save(s);
     if (backend === 'neutralino') {
       try { return Neutralino.storage.setData(KEY, JSON.stringify(s)).catch(function () { }); } catch (e) { }

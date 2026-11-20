@@ -49,6 +49,7 @@ var UI = (function () {
     setTimeout(function () { rec.m.remove(); }, 180);
     if (rec.onClose) rec.onClose();
     if (cb) cb();
+    if (!stack.length && window.Fps) Fps.relock();     // first person: take the mouse back
   }
   function closeAll() { while (stack.length) { var r = stack.pop(); r.m.remove(); } }
   function isBlocking() { return stack.length > 0; }
@@ -97,12 +98,15 @@ var UI = (function () {
     var row = el('div', 't-btns', scr);
     var b1 = onTap(el('div', '', row), function () { settings(); }); b1.style.backgroundImage = 'var(--a-big_setting)';
     var b2 = onTap(el('div', '', row), function () { levels(); }); b2.style.backgroundImage = 'var(--a-big_leader)';
+    var b5 = onTap(el('div', 't-club', row), function () { Club.open(); }); b5.style.backgroundImage = 'var(--a-btn_round)'; el('img', '', b5).src = Art.icon('trophy');
     var b3 = onTap(el('div', '', row), function () { help(); }); b3.style.backgroundImage = 'var(--a-big_about)';
     if (Platform.canExit()) { var b4 = onTap(el('div', '', row), function () { confirmExit(); }); b4.style.backgroundImage = 'var(--a-b_close)'; b4.style.backgroundSize = '92%'; }
     // wide screens
     var menu = el('div', 't-menu', scr);
     var mplay = onTap(el('div', 'tm-btn play', menu, '<b>JOUER</b><small></small>'), function () { Game.enterHub(); });
     onTap(el('div', 'tm-btn', menu, '<i style="background-image:var(--a-b_prize)"></i>NIVEAUX'), function () { levels(); });
+    var mclub = onTap(el('div', 'tm-btn', menu, '<i></i>CLUB DES CHEFS'), function () { Club.open(); });
+    mclub.querySelector('i').style.backgroundImage = 'url("' + Art.icon('trophy') + '")';
     onTap(el('div', 'tm-btn', menu, '<i style="background-image:var(--a-b_settings)"></i>PARAMÈTRES'), function () { settings(); });
     onTap(el('div', 'tm-btn', menu, '<i style="background-image:var(--a-big_about)"></i>AIDE'), function () { help(); });
     if (Platform.canExit()) onTap(el('div', 'tm-btn quit', menu, '<i style="background-image:var(--a-b_close)"></i>QUITTER'), function () { confirmExit(); });
@@ -167,16 +171,20 @@ var UI = (function () {
     board(I, 80, 70, 560, 540, 'b-a');
     leaf(I, 0, 'PAUSE');
     var pp = paper(I, 130, 170, 460, 250, 'p-a');
-    txt(I, 130, 196, 460, '<span class="lg" style="font-size:34px;color:#6b3a14">JOUR ' + sh.day + '</span><br>Objectif : <b>' + fmt(sh.goal) + '</b> ' + COIN() + '<br>Gagné : <b>' + fmt(sh.earned) + '</b> ' + COIN(), 'ptxt', 26);
+    txt(I, 130, 196, 460, '<span class="lg" style="font-size:34px;color:#6b3a14">' + (sh.challenge ? 'DÉFI DU JOUR' : 'JOUR ' + sh.day) + '</span><br>' +
+      (sh.challenge ? 'Ton record : <b>' + fmt(Daily.defiState().best) + '</b> ' : 'Objectif : <b>' + fmt(sh.goal) + '</b> ') + COIN() + '<br>Gagné : <b>' + fmt(sh.earned) + '</b> ' + COIN(), 'ptxt', 26);
     var mb = sq(I, 238, 330, 74, App.save.settings.music > 0 ? 'b_sound' : 'b_sound_off', function () {
       App.save.settings.music = App.save.settings.music > 0 ? 0 : 0.6; applySettings(); mb.style.backgroundImage = 'var(--a-' + (App.save.settings.music > 0 ? 'b_sound' : 'b_sound_off') + ')';
     });
     var sb = sq(I, 408, 330, 74, App.save.settings.sfx > 0 ? 'b_misic' : 'b_music_off', function () {
       App.save.settings.sfx = App.save.settings.sfx > 0 ? 0 : 0.8; applySettings(); sb.style.backgroundImage = 'var(--a-' + (App.save.settings.sfx > 0 ? 'b_misic' : 'b_music_off') + ')';
     });
-    sq(I, 150, 452, 100, 'b_restart', function () { confirm('RECOMMENCER ?', 'Recommencer le jour ' + sh.day + ' ?<br>Les pièces déjà gagnées sont gardées.', function () { md.close(); Game.startDay(sh.day); }); });
+    sq(I, 150, 452, 100, 'b_restart', function () {
+      if (sh.challenge) confirm('RECOMMENCER ?', 'Recommencer le défi du jour ?<br>Cet essai ne comptera pas.', function () { md.close(); Game.startDefi(); });
+      else confirm('RECOMMENCER ?', 'Recommencer le jour ' + sh.day + ' ?<br>Les pièces déjà gagnées sont gardées.', function () { md.close(); Game.startDay(sh.day, { sim: sh.manual }); });
+    });
     sq(I, 300, 440, 124, 'b_play', function () { md.close(); });
-    sq(I, 470, 452, 100, 'b_menu', function () { confirm('QUITTER ?', 'Fermer le restaurant et revenir à la cuisine ?<br>Le jour ne sera pas validé.', function () { md.close(); Game.quitShift(); }); });
+    sq(I, 470, 452, 100, 'b_menu', function () { confirm('QUITTER ?', sh.challenge ? 'Arrêter le défi et revenir à ta cuisine ?<br>Cet essai ne comptera pas.' : 'Fermer le restaurant et revenir à la cuisine ?<br>Le jour ne sera pas validé.', function () { md.close(); Game.quitShift(); }); });
     return md;
   }
 
@@ -529,7 +537,8 @@ var UI = (function () {
         });
       });
       var vr = pos(el('div', 'srow', I), 100, y, 520); y += 92;
-      el('div', 'lab ctxt', vr, 'Version ' + APP_LABEL).style.cssText += ';color:#fff6dc;font-size:24px;top:22px';
+      var vl = el('div', 'lab ctxt tap', vr, 'Version ' + APP_LABEL + ' <u style="font-size:17px;opacity:.8">crédits</u>'); vl.style.cssText += ';color:#fff6dc;font-size:24px;top:22px';
+      onTap(vl, function () { credits(); });
       pill(vr, 300, 4, 220, 70, 'MISES À JOUR', function () { md.close(); Updater.check(true); }).style.fontSize = '20px';
       var by = y + 24;
       pill(I, 90, by, 170, 80, 'AIDE', function () { help(); });
@@ -559,12 +568,14 @@ var UI = (function () {
       [ASSETS.chef_happy, 'Entre deux journées, <b>améliore</b> tes stations, embauche, décore et investis : deviens un vrai Tycoon !'],
       [Art.book(), 'Ouvre le <b>Carnet</b> pour suivre l\'histoire du restaurant. Sers souvent tes <b>habitués</b> pour découvrir leurs histoires.']
     ];
+    steps.push([Art.icon('walk'), 'Mode <b>Simulateur</b> : choisis « Vue simulateur » dans la cuisine pour marcher, cuisiner et servir toi-même.']);
+    steps.push([Art.icon('trophy'), '<b>Club des chefs</b> : classement mondial, défi du jour, missions, cadeau quotidien et codes cadeaux.']);
     var kb = document.getElementById('app').classList.contains('keys');
-    if (kb) steps.push([keyIcon(), 'Au <b>clavier</b> : <b>1</b> à <b>8</b> pour cuisiner, <b>A Z E R</b> pour les bonus, <b>Espace</b> pour la pause, <b>Échap</b> pour revenir.']);
-    var y = kb ? 198 : 212, dy = kb ? 103 : 118, isz = kb ? 80 : 92;
+    if (kb) steps.push([keyIcon(), 'Au <b>clavier</b> : <b>1</b> à <b>8</b> pour cuisiner, <b>A Z E R</b> pour les bonus, <b>Espace</b> pour la pause, <b>V</b> la vue, <b>K</b> le club.']);
+    var dy = Math.floor(726 / steps.length), isz = Math.min(92, dy - 16), y = 196 + Math.round((dy - isz) / 2), fs = dy > 110 ? 22 : dy > 92 ? 20 : 18.5;
     steps.forEach(function (s) {
-      var im = pos(el('img', '', I), 108, y, isz, isz); im.src = s[0]; im.style.position = 'absolute'; im.style.objectFit = 'contain';
-      var t = txt(I, 212, y + (kb ? 0 : 4), 408, s[1], 'ptxt', kb ? 20 : 22); t.style.textAlign = 'left';
+      var im = pos(el('img', '', I), 108 + (92 - isz) / 2, y, isz, isz); im.src = s[0]; im.style.position = 'absolute'; im.style.objectFit = 'contain';
+      var t = txt(I, 212, y - 2, 408, s[1], 'ptxt', fs); t.style.textAlign = 'left'; t.style.lineHeight = '1.2';
       y += dy;
     });
     pill(I, 235, 956, 250, 86, 'COMPRIS !', function () { md.close(); });
@@ -671,6 +682,46 @@ var UI = (function () {
     card(516, 'classique', 'CLASSIQUE', 'Les clients s’impatientent : sers-les vite avant qu’ils partent ! Pour les chefs qui aiment le défi.', 'time', false);
     txt(I, 100, 776, 520, 'Tu pourras changer à tout moment dans les Paramètres.', 'ptxt ctxt', 21).style.color = '#fff6dc';
   }
+  // first day in the simulator: how to play
+  function simHelp(done) {
+    var touch = (('ontouchstart' in window) || navigator.maxTouchPoints > 0) && !(window.matchMedia && matchMedia('(pointer: fine)').matches);
+    var md = modal(900, { closable: false, onBack: function () { md.close(done); } });
+    var I = md.inner;
+    board(I, 40, 80, 640, 790);
+    leaf(I, 6, 'SIMULATEUR', true);
+    paper(I, 76, 178, 568, 560);
+    var rows = touch ? [
+      ['Marcher', 'Pose ton pouce gauche en bas de l’écran et glisse.'],
+      ['Regarder', 'Glisse un doigt ailleurs sur l’écran.'],
+      ['Agir', 'Vise une station ou un client, puis touche le gros bouton.']
+    ] : [
+      ['Marcher', 'Touches <b>Z Q S D</b> ou les flèches. <b>Maj</b> pour courir.'],
+      ['Regarder', 'Bouge la souris. <b>Échap</b> met en pause et libère la souris.'],
+      ['Agir', 'Vise une station ou un client, puis <b>clique</b> (ou touche <b>E</b>).']
+    ];
+    var h = '<div class="lg" style="font-size:27px;color:#6b3a14;margin-bottom:10px">Tu es dans la cuisine !</div>';
+    rows.forEach(function (r) { h += '<div style="margin:0 0 9px"><b class="lg" style="font-size:22px;color:#2f8a17">' + r[0] + '</b><br>' + r[1] + '</div>'; });
+    h += '<div style="margin-top:12px;border-top:3px dashed rgba(107,58,20,.3);padding-top:12px"><b>1.</b> Vise une station : <b>Cuire</b>.<br><b>2.</b> Quand c’est prêt : <b>Prendre</b> (3 plats dans les mains au plus).<br><b>3.</b> Va au comptoir, vise le client : <b>Servir</b>.<br><span style="font-size:19px;opacity:.85">Les commandes en attente sont affichées à gauche. Les objectifs sont plus bas qu’en vue gérant.</span></div>';
+    var t = txt(I, 106, 204, 508, h, 'ptxt', 22); t.style.textAlign = 'left'; t.style.lineHeight = '1.26';
+    pill(I, 215, 756, 290, 92, 'C’EST PARTI !', function () { md.close(done); });
+    Sfx.play('soft');
+  }
+  // who made what
+  function credits() {
+    var md = modal(610, { tapOutside: true });
+    var I = md.inner;
+    board(I, 50, 80, 620, 500, 'b-a');
+    leaf(I, 4, 'CRÉDITS');
+    closeBtn(I, 610, 64, function () { md.close(); });
+    paper(I, 90, 186, 540, 340, 'p-a');
+    var t = txt(I, 116, 208, 488, '<b class="lg" style="font-size:26px;color:#6b3a14">Cuistot Tycoon ' + APP_LABEL + '</b><br>' +
+      'Interface : pack d’interface « jungle » de <b>CraftPix</b> (craftpix.net).<br>' +
+      'Meubles, vaisselle et plats en 3D : pack « <b>Kitchen &amp; Diner 3D</b> » de <b>Harning</b> (harning.itch.io).<br>' +
+      'Moteur 3D : <b>three.js</b> (licence MIT).<br>' +
+      'Police : Luckiest Guy et Fredoka.<br>' +
+      '<span style="font-size:19px">Merci de jouer, Chef !</span>', 'ptxt', 21);
+    t.style.textAlign = 'left'; t.style.lineHeight = '1.32';
+  }
   function breakReminder(done) {
     var md = modal(660, { closable: false, onBack: function () { md.close(done); } });
     var I = md.inner;
@@ -688,7 +739,7 @@ var UI = (function () {
     confirm: confirm, confirmExit: confirmExit, pause: pause, results: results, levelUp: levelUp, chainLevelUps: chainLevelUps, offline: offline,
     stationPopup: stationPopup, shop: shop, levels: levels, settings: settings, help: help, applySettings: applySettings, refreshTop: refreshTop,
     buildTitle: buildTitle, refreshTitle: refreshTitle, setFullscreen: setFullscreen, el: el, pos: pos, reward: reward, chooseMode: chooseMode, breakReminder: breakReminder,
-    updatePrompt: updatePrompt, updateProgress: updateProgress, whatsNew: whatsNew
+    updatePrompt: updatePrompt, updateProgress: updateProgress, whatsNew: whatsNew, simHelp: simHelp, board: board, paper: paper, leaf: leaf, pill: pill, txt: txt, closeBtn: closeBtn, sq: sq, burst: burst, onTap: onTap
   };
 })();
 

@@ -5,14 +5,18 @@ L'utilisateur écrit en français et on le tutoie. Le jeu est en français.
 ## Ce que contient le dépôt
 
 - `source/` : le code du jeu (HTML/CSS/JS sans framework) et les outils.
-  - `src/js/` : `data.js` (équilibrage, lieux, succès), `sim.js` (simulation d'une journée, sans DOM), `progress.js`, `scene.js` (affichage du restaurant), `view3d.js` (vue 3D three.js), `ui.js` (fenêtres), `story.js` (histoire, carnet), `world.js` (carte de l'île), `achievements.js`, `updater.js` (mises à jour), `game.js`, `main.js`.
+  - `src/js/` : `data.js` (équilibrage, lieux, succès), `sim.js` (simulation d'une journée, sans DOM), `progress.js`, `scene.js` (affichage du restaurant), `models.js` (modèles 3D des stations, des objets et des plats), `view3d.js` (vue 3D three.js), `fps.js` (mode Simulateur à la première personne), `ui.js` (fenêtres), `story.js` (histoire, carnet), `world.js` (carte de l'île), `achievements.js`, `updater.js` (mises à jour), `club.js` (Club des chefs : profil, classement mondial, codes, cadeau du jour, missions, défi du jour, statistiques, prestige), `game.js`, `main.js`.
   - `src/version.json` : **numéro de version**. `build` est un entier qui doit augmenter à chaque publication.
   - `tools/build.py` : construit `dist/index.html` (web, Android), `dist/desktop/index.html` (Windows) et `dist/update/` (fichiers de mise à jour).
+  - `tools/kpack.py` : convertit le pack 3D « Kitchen & Diner 3D » en `build/kmodels.json` (voir plus bas).
+  - `vendor/three_entry.js` : liste des classes three.js mises dans le jeu (en ajouter une ici si le code en utilise une nouvelle, puis relancer `setup.sh`).
   - `android/` : appli Android (WebView + pont Java). `desktop/` : appli Windows/Linux (Neutralino).
 - `update/` : canal de mises à jour lu par les jeux installés (`version.json`, `game.html`, `desktop.html`).
 - `download/` : APK et EXE à jour. `index.html` : version web.
 
 Les images du pack d'interface (CraftPix) ne sont publiées que dans le jeu construit. `setup.sh` les récupère depuis `update/game.html` : ne jamais les ajouter au dépôt comme fichiers séparés.
+
+Même règle pour le pack 3D **« Kitchen & Diner 3D » de Harning** (meubles, vaisselle, plats) : sa licence interdit de redistribuer ses fichiers. Les `.glb` ne vont **jamais** dans le dépôt. `tools/kpack.py <dossier du pack>` les convertit en données compactes (`build/kmodels.json`, dossier ignoré par git) que `build.py` met dans le jeu (`KMODELS`) ; `setup.sh` récupère ce fichier depuis `update/game.html` quand on n'a pas le pack. Sans ce fichier le jeu fonctionne quand même (formes simples à la place).
 
 ## Deux mises en page
 
@@ -20,6 +24,21 @@ Les images du pack d'interface (CraftPix) ne sont publiées que dans le jeu cons
 - **Grand écran** (PC, fenêtre plus large que haute ×1,3 ; `App.wide`) : la scène 3D prend tout l'écran (`App.W` × 1200), les stations sont des objets 3D sur le plan de travail et le HTML (étiquettes, bulles, HUD) suit la 3D (`View3D.metrics()`, `Scene.layoutWide`, `Scene.placeHud`). Elle a besoin de la 3D : sans WebGL ou avec « Vue 3D » coupée, le jeu reste en portrait.
 - Les règles CSS du grand écran sont à la fin de `style.css` (`.wide ...`). Les fenêtres (`UI.modal`) font 720 px par défaut, `opts.w` pour plus large (boutique, carnet).
 - Toute nouveauté doit marcher dans les deux mises en page.
+
+## Mode Simulateur (première personne)
+
+- Bouton « Vue gérant / Vue simulateur » dans la cuisine (touche `V`). La journée est la même simulation (`Shift` avec `opts.manual`) : pas de service automatique, objectifs × `GD.MANUAL_GOAL`, le joueur cuit, prend (3 plats au plus) et sert lui-même (`takeDish`, `giveDish`).
+- `Fps` (fps.js) gère la marche (touches physiques ZQSD/WASD/flèches, souris capturée ; sur téléphone : manette à gauche, glisser pour regarder, gros bouton d'action) ; `View3D.setFps(true)` passe toute la cuisine en 3D sur n'importe quel écran (`View3D.isFull()`), ajoute la salle (`buildRoom`), le plateau porté (scène à part dessinée après la cuisine) et les aides avec des jambes en 3D.
+- Bouton « visite » : se promener dans la cuisine sans clients (`Game.visit()`).
+- Tests : `T.fpbot(s)` (robot qui vise et agit) et `T.fpwalk(s)` (robot qui marche vraiment) dans `tools/testkit.js`.
+
+## Club des chefs, classement mondial et codes
+
+- Le serveur est une base Postgres (projet Lovable Cloud « Cuistot Tycoon ») : tables `lb_players`, `lb_codes`, `lb_redeems`, `lb_news`, toutes fermées (RLS sans règle). Le jeu n'appelle que trois fonctions : `lb_submit` (envoyer ses scores), `lb_top` (lire un classement : `fortune`, `etoiles`, `record`, `defi`) et `lb_redeem` (utiliser un code). L'adresse et la clé publique sont dans `club.js` (`Online`). La clé ne donne accès qu'à ces fonctions.
+- Rien n'est envoyé tant que le joueur n'a pas choisi un pseudo et activé « Dans le classement ». Pas de compte : un identifiant et un secret aléatoires sont créés sur l'appareil (`save.profile`).
+- **Ajouter un code cadeau en ligne** : une ligne dans `lb_codes` (`code` en majuscules sans espace, `coins`, `xp`, `turbo`, `coeur`, `temps`, `chance`, `gift`, `message`, `max_uses` (0 = illimité), `expires`, `active`). Les codes hors ligne sont dans `club.js` (table `LOCAL` de `Codes` : des empreintes, pas le texte ; `Codes.fp('MONCODE')` dans la console du jeu donne l'empreinte d'un nouveau code).
+- **Défi du jour** : même cuisine et mêmes clients pour tous (`Daily.defiInfo`, tirage selon la date de Paris). Pendant le défi `App.save` est une sauvegarde temporaire et la vraie est dans `App.real` ; `Store.save` n'écrit jamais la temporaire. Utiliser `SV()` pour toucher à la vraie sauvegarde.
+- Le classement ne fonctionne pas dans l'aperçu Claude (artifact) : les appels réseau y sont bloqués.
 
 ## Préparer l'environnement
 
@@ -47,3 +66,5 @@ Si le code natif change (`android/src/...MainActivity.java` ou les permissions N
 - Mode Détente par défaut : personne ne part fâché, les plats prêts sont servis tout seuls.
 - La sauvegarde garde toutes les clés inconnues (`Store.load`) : ne jamais supprimer de données des joueurs.
 - La mise à jour n'est proposée qu'au titre ou en cuisine, jamais pendant une journée ou une histoire.
+- Le prestige (toque d'or) remet la cuisine à zéro à la demande du joueur, après confirmation : ce qui est abandonné est gardé dans `save.prestigeBackup` et peut être repris (« Annuler le dernier »).
+- `View3D.supported()` ne teste WebGL qu'une fois (chaque test crée un contexte) : ne pas remettre de test à chaque appel.

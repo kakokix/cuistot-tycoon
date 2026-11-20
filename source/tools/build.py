@@ -10,7 +10,7 @@ CHARS = os.path.join(ROOT, "build", "chars")
 OUT = os.path.join(ROOT, "dist", "index.html")
 NM = os.path.join(ROOT, "node_modules", "@fontsource")
 
-JS_ORDER = ["data.js", "sim.js", "progress.js", "util.js", "art.js", "audio.js", "scene.js", "ui.js", "story.js", "world.js", "achievements.js", "updater.js", "view3d.js", "game.js", "main.js"]
+JS_ORDER = ["data.js", "sim.js", "progress.js", "util.js", "art.js", "audio.js", "scene.js", "ui.js", "story.js", "world.js", "achievements.js", "updater.js", "club.js", "models.js", "view3d.js", "fps.js", "game.js", "main.js"]
 
 
 def b64(path, mime):
@@ -35,6 +35,9 @@ def main():
     js = "var APP_VERSION=%s,APP_LABEL=%s,APP_BUILD=%d,APP_NOTES=%s;\n" % (
         json.dumps(ver["version"]), json.dumps(ver["label"]), ver["build"], json.dumps(ver["notes"], ensure_ascii=False))
     js += "var ASSETS=" + json.dumps(assets, separators=(",", ":")) + ";\n"
+    km = os.path.join(ROOT, "build", "kmodels.json")
+    # 3D props of the pack "Kitchen & Diner 3D" by Harning, converted by tools/kpack.py (only inside the built game)
+    js += "var KMODELS=" + (open(km, encoding="utf-8").read().strip() if os.path.exists(km) else "null") + ";\n"
     js += "\n// ---- three.js (MIT license, threejs.org) ----\n" + open(os.path.join(ROOT, "build", "vendor", "three.min.js"), encoding="utf-8").read() + "\n"
     for f in JS_ORDER:
         code = open(os.path.join(SRC, "js", f), encoding="utf-8").read()

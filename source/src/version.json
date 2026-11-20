@@ -1,13 +1,13 @@
 {
- "version": "1.4.0",
- "label": "1.4",
- "build": 5,
+ "version": "2.0.0",
+ "label": "2.0",
+ "build": 6,
  "notes": [
-  "<b>Version PC entièrement refaite</b> : grand écran et restaurant tout en 3D",
-  "Les stations sont posées sur le plan de travail, la caméra suit la souris",
-  "<b>Nouveau menu</b>, carte de l’île, boutique et histoires en grand format",
-  "<b>Clavier</b> : 1 à 8 pour cuisiner, A Z E R pour les bonus, F11 plein écran",
-  "<b>Mises à jour</b> : le jeu vérifie tout seul toutes les 2 minutes, sans le fermer",
-  "Téléphone : comptoir, lanternes et histoires plus jolis"
+  "<b>Mode Simulateur</b> : marche dans ta cuisine, cuisine et sers toi-même",
+  "<b>Vrais modèles 3D</b> et cuisine entièrement meublée",
+  "<b>Club des chefs</b> : classement mondial, défi du jour, missions, cadeau quotidien",
+  "<b>Codes cadeaux</b> : essaie BIENVENUE et CUISTOT2 !",
+  "<b>Prestige</b> : toques d’or (+25 % de gains), nouveaux succès, statistiques",
+  "Interfaces mieux placées sur téléphone et sur PC"
  ]
 }

@@ -62,7 +62,13 @@ var GD = (function () {
     { id: 'season1',   name: 'Fin de la Saison 1',   desc: 'Terminer la Saison 1',          stat: 'season1', goal: 1,    reward: 1000 },
     { id: 'places',    name: 'Globe-trotteur',       desc: 'Ouvrir les 4 restaurants',      stat: 'places', goal: 4,     reward: 5000 },
     { id: 'season2',   name: 'Fin de la Saison 2',   desc: 'Terminer la Saison 2',          stat: 'season2', goal: 1,    reward: 8000 },
-    { id: 'ota',       name: 'À la pointe',          desc: 'Mettre le jeu à jour depuis le jeu', stat: 'ota', goal: 1,     reward: 500 }
+    { id: 'ota',       name: 'À la pointe',          desc: 'Mettre le jeu à jour depuis le jeu', stat: 'ota', goal: 1,     reward: 500 },
+    // version 2
+    { id: 'sim5',      name: 'Les mains dans la farine', desc: 'Terminer 5 journées en mode Simulateur', stat: 'sim', goal: 5, reward: 600 },
+    { id: 'defi7',     name: 'Compétiteur',          desc: 'Jouer 7 défis du jour',         stat: 'defis', goal: 7,   reward: 900 },
+    { id: 'gift7',     name: 'Fidèle au poste',      desc: 'Prendre le cadeau du jour 7 jours de suite', stat: 'streak', goal: 7, reward: 1000 },
+    { id: 'code1',     name: 'Bon plan',             desc: 'Utiliser un code cadeau',       stat: 'codes', goal: 1,   reward: 150 },
+    { id: 'prestige1', name: 'Toque d’or',           desc: 'Gagner une toque d’or (prestige)', stat: 'prestige', goal: 1, reward: 3000 }
   ];
   function achValue(save, stat) {
     var st = save.stats || {};
@@ -72,6 +78,9 @@ var GD = (function () {
     if (stat === 'season1') return save.story && save.story.seen && save.story.seen.c12 ? 1 : 0;
     if (stat === 'season2') return save.story && save.story.seen && save.story.seen.s2c12 ? 1 : 0;
     if (stat === 'places') { var p = 0; LOCATIONS.forEach(function (l) { if (locUnlocked(save, l.id)) p++; }); return p; }
+    if (stat === 'prestige') return save.prestige || 0;
+    if (stat === 'codes') return Object.keys(save.codes || {}).length;
+    if (stat === 'streak') return (save.gift && save.gift.streak) || 0;
     return st[stat] || 0;
   }
 
@@ -113,8 +122,10 @@ var GD = (function () {
 
   function stationById(id) { for (var i = 0; i < STATIONS.length; i++) if (STATIONS[i].id === id) return STATIONS[i]; return null; }
 
+  // prestige: each golden toque adds 25 % to the price of every dish, for ever
+  function prestigeMul(save) { return 1 + 0.25 * ((save && save.prestige) || 0); }
   function stationStats(st, level, save) {
-    var sign = 1 + 0.08 * ((save && save.decor && save.decor.enseigne) || 0);
+    var sign = (1 + 0.08 * ((save && save.decor && save.decor.enseigne) || 0)) * prestigeMul(save);
     if (save && save.flags && save.flags.livre) sign *= 1.1; // story reward: the Great Book of Flavours
     level = Math.max(1, level);
     return {
@@ -180,7 +191,7 @@ var GD = (function () {
       business: { stand: 0, truck: 0, kiosque: 0, franchise: 0 },
       days: {},           // day -> best stars
       unlocked: 1,        // highest playable day
-      stats: { served: 0, earned: 0, lost: 0, days: 0, vip: 0, ota: 0 },
+      stats: { served: 0, earned: 0, lost: 0, days: 0, vip: 0, ota: 0, bestDay: 0, starsAll: 0, sim: 0, defis: 0 },
       settings: { music: 0.45, sfx: 0.7, vibra: true, pause: true },
       mode: 'detente',           // 'detente' (relaxed, default) or 'classique'
       story: { seen: {}, read: {} },
@@ -191,6 +202,13 @@ var GD = (function () {
       view3d: false,             // 3D test view
       lastBuild: 0,              // last game build that ran (for "what's new")
       seenTuto: {},
+      // version 2: club des chefs
+      profile: { name: '', pid: '', secret: '', on: false },   // pseudo + random identity for the world ranking
+      codes: {},                                                // gift codes already used
+      gift: { day: '', streak: 0 },                             // daily gift
+      quests: { day: '', list: [], bonus: false },              // missions of the day
+      defi: { day: '', best: 0, tries: 0, paid: false },        // daily challenge
+      prestige: 0,                                              // golden toques
       lastSeen: 0,
       name: 'Chez Cuistot'
     };
@@ -206,6 +224,7 @@ var GD = (function () {
     BUSINESS: BUSINESS, OFFLINE_CAP_H: OFFLINE_CAP_H,
     stationById: stationById, stationStats: stationStats, upgradeCost: upgradeCost, seatsFor: seatsFor,
     businessCost: businessCost, passiveRate: passiveRate, xpNeed: xpNeed, goalFor: goalFor, dayConfig: dayConfig,
+    prestigeMul: prestigeMul, MANUAL_GOAL: 0.6,
     newSave: newSave
   };
 })();

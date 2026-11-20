@@ -21,8 +21,11 @@ var Scene = (function () {
 
   // wide (PC) layout: the whole screen is the 3D restaurant, the HTML layer follows the 3D objects
   function isWide() { return !!(window.View3D && View3D.isWide()); }
+  // the whole kitchen is 3D (wide layout, or first-person simulator on any screen): labels follow the models
+  function is3d() { return !!(window.View3D && View3D.isFull()); }
+  function fpsOn() { return !!(window.Fps && Fps.active()); }
   function stationCenter(i) {
-    if (isWide()) { var o = ST[i]; return { x: o.sx, y: o.sy - o.ph / 2, top: o.sy - o.ph }; }
+    if (is3d()) { var o = ST[i]; return { x: o.sx, y: o.sy - o.ph / 2, top: o.sy - o.ph }; }
     var c = i % 4, r = Math.floor(i / 4);
     return { x: COL0 + c * (COLW + COLG) + COLW / 2, y: (r === 0 ? L.row1 : L.row2) + ROWH / 2, top: r === 0 ? L.row1 : L.row2 };
   }
@@ -32,7 +35,7 @@ var Scene = (function () {
   }
   // where a seat is on screen before its customer exists
   function seatPos(seat, n) {
-    if (isWide()) return View3D.seatScreen(seat, n);
+    if (is3d()) return View3D.seatScreen(seat, n);
     return { x: seatX(seat, n), top: L.custBottom - 224, sc: n >= 5 ? 0.82 : n === 4 ? 0.93 : 1 };
   }
 
@@ -70,6 +73,10 @@ var Scene = (function () {
     E.bookBtn = el('div', 'bookbtn tap', root, '<img><div class="badge">!</div><i class="key">C</i>');
     E.bookBtn.querySelector('img').src = Art.book();
     E.bookBtn.addEventListener('click', function () { Sfx.play('click'); Story.openJournal(); });
+    // club des chefs: world ranking, daily challenge, missions, gift, codes...
+    E.clubBtn = el('div', 'clubbtn tap', root, '<img><div class="badge">!</div><i class="key">K</i>');
+    E.clubBtn.querySelector('img').src = Art.icon('trophy');
+    E.clubBtn.addEventListener('click', function () { Sfx.play('click'); Club.open(); });
     E.pauseBtn = el('div', 'sq tap', root); E.pauseBtn.style.cssText = 'left:18px;top:2px;width:92px;height:92px;background-image:var(--a-b_pause)';
     E.timer = el('div', 'timer', root, '<img src="' + BLANK + '"><span>1:30</span>');
     E.timer.querySelector('img').style.cssText = 'background:var(--a-clock) center/contain no-repeat';
@@ -107,6 +114,12 @@ var Scene = (function () {
     E.shopBtn.addEventListener('click', function () { Sfx.play('click'); UI.shop(); });
     E.lvBtn.addEventListener('click', function () { Sfx.play('click'); UI.levels(); });
     E.openBtn.addEventListener('click', function () { Sfx.play('click'); Game.startDay(App.save.unlocked); });
+    // manager view (from above) or simulator (first person): the choice is kept for the next days
+    E.simBtn = el('div', 'simchip tap', root, '<i></i><span></span><em class="key">V</em>');
+    E.simBtn.addEventListener('click', function () { toggleSim(); });
+    E.visitBtn = el('div', 'visitbtn tap', root, '<img>');
+    E.visitBtn.querySelector('img').src = Art.icon('walk');
+    E.visitBtn.addEventListener('click', function () { Sfx.play('click'); need3d(function () { Game.visit(); }); });
     E.lvl.addEventListener('click', function () { Sfx.play('click'); UI.toast('Chef niveau ' + App.save.level + ' — XP ' + Math.floor(App.save.xp) + ' / ' + GD.xpNeed(App.save.level)); });
   }
 
@@ -146,7 +159,7 @@ var Scene = (function () {
   // ---------------- layout ----------------
   function layout(H) {
     L.H = H; L.W = App.W;
-    if (isWide()) layoutWide(H); else layoutPortrait(H);
+    if (is3d()) layoutWide(H); else layoutPortrait(H);
     Object.keys(CH).forEach(function (k) { var o = CH[k]; o.x = o.x0; o.path = []; o.el.style.left = px(o.x - o.w / 2); });
     placeHud();
     layoutSeats();
@@ -194,7 +207,7 @@ var Scene = (function () {
   function layoutWide(H) {
     View3D.layout();                      // camera first: the stations are placed where the 3D puts them
     var m = View3D.metrics(), W = App.W;
-    L.botTop = H - 126;
+    L.botTop = H - (App.wide ? 126 : 112);
     L.counterTop = m.counterY; L.custBottom = m.counterY + 16;
     root.style.setProperty('--sp', Math.round(m.geo[0].pw) + 'px');
     for (var i = 0; i < 8; i++) {
@@ -213,7 +226,7 @@ var Scene = (function () {
     if (wide) {
       at(E.lvl, 30, 24);
       at(E.coins, hub ? 252 : 36, 30);
-      at(E.bookBtn, W - 232, 16); at(E.setBtn, W - 124, 16);
+      at(E.bookBtn, W - 232, 16); at(E.setBtn, W - 124, 16); at(E.clubBtn, W - 340, 16);
       at(E.timer, W - 300, 30); at(E.pauseBtn, W - 124, 16);
       L.goalW = Math.min(900, W - 760);
       E.goal.style.left = px((W - L.goalW) / 2); E.goal.style.right = 'auto'; E.goal.style.width = px(L.goalW); E.goal.style.top = '18px';
@@ -225,7 +238,7 @@ var Scene = (function () {
     } else {
       at(E.lvl, 14, 8);
       at(E.coins, hub ? 232 : 186, 14);
-      at(E.bookBtn, 508, 2); at(E.setBtn, 604, 2);
+      at(E.bookBtn, 508, 2); at(E.setBtn, 604, 2); at(E.clubBtn, 14, 100);
       at(E.timer, 560, 14); at(E.pauseBtn, 18, 2);
       L.goalW = 672;
       E.goal.style.left = ''; E.goal.style.right = ''; E.goal.style.width = ''; E.goal.style.top = '';
@@ -235,6 +248,9 @@ var Scene = (function () {
       E.mapBtn.style.left = ''; E.mapLab.style.left = '';
     }
     E.hub.style.top = E.boosts.style.top = px(L.botTop);
+    // choice of the view: under the name plate on a PC, on the beam under the top bar on a phone
+    at(E.simBtn, wide ? (W - 340) / 2 : 190, wide ? 128 : 106);
+    at(E.visitBtn, wide ? (W + 340) / 2 + 14 : 614, wide ? 120 : 100);
     L.goalX = wide ? (W - L.goalW) / 2 : 24; L.goalY = wide ? 18 : 92;
     L.coinX = parseFloat(E.coins.style.left) + 20; L.coinY = wide ? 62 : 46;
     L.timerX = parseFloat(E.timer.style.left) + 60;
@@ -308,6 +324,7 @@ var Scene = (function () {
       o.sti.style.display = 'block';
       o.sti.style.opacity = owned ? 1 : 0.35;
       if (owned) o.over.innerHTML = '';
+      else if (s.__defi) o.over.innerHTML = '<div class="t1" style="opacity:.8">Fermé</div>';
       else if (s.level >= def.unlock) {
         o.over.innerHTML = mode === 'hub' ? '<div class="plus"><img src="' + Art.plus() + '"></div><div class="t1">' + def.name + '</div><div class="t2 gold"><img class="coin" src="' + Art.coin() + '"> ' + fmt(def.cost) + '</div>' : '<div class="t1" style="opacity:.8">À acheter</div>';
       } else {
@@ -331,8 +348,18 @@ var Scene = (function () {
     E.lvl.querySelector('.st').textContent = s.level;
     E.lvl.querySelector('.xb i').style.width = px(4 + 128 * Math.min(1, s.xp / GD.xpNeed(s.level)));
     E.openBtn.querySelector('small').textContent = 'Jour ' + s.unlocked;
+    // shown as soon as the device can draw 3D (if "Vue 3D" is off, the button offers to turn it on)
+    var simOk = hub && window.View3D && View3D.supported() && !View3D.failed() && !!s.seenTuto.basic && !fpsOn();
+    E.simBtn.style.display = simOk ? 'flex' : 'none';
+    E.visitBtn.style.display = simOk ? 'flex' : 'none';
+    var simOn = !!s.settings.sim && View3D.usable();
+    E.simBtn.classList.toggle('on', simOn);
+    E.simBtn.querySelector('span').textContent = simOn ? 'Vue simulateur' : 'Vue gérant';
     E.shopBadge.style.display = Progress.canAffordSomething(s) ? 'flex' : 'none';
     E.bookBtn.style.display = hub ? 'flex' : 'none';
+    E.clubBtn.style.display = hub && s.seenTuto.basic ? 'flex' : 'none';
+    var cw = hub && window.Daily ? Daily.waiting() : 0, cbg = E.clubBtn.querySelector('.badge');
+    cbg.style.display = cw ? 'flex' : 'none'; cbg.textContent = cw;
     var places = GD.LOCATIONS.filter(function (l) { return GD.locUnlocked(s, l.id); }).length;
     var showMap = hub && places > 1;
     L.showMap = showMap;
@@ -375,6 +402,7 @@ var Scene = (function () {
   // ---------------- input ----------------
   function onStation(i) {
     if (UI.isBlocking()) return;
+    if (fpsOn()) { Fps.tapStation(i); return; }
     ST[i].bumpT = performance.now();
     if (mode === 'hub') {
       Sfx.play('click');
@@ -392,6 +420,7 @@ var Scene = (function () {
   }
   function onCustomer(id) {
     if (!sh || sh.over || Game.isPaused() || UI.isBlocking()) return;
+    if (fpsOn()) { Fps.interact(); return; }
     var u = CU[id]; if (!u) return;
     var n = sh.tapCustomer(u.c.seat);
     if (!n) { bumpCls(u.el, 'shake'); }
@@ -507,7 +536,7 @@ var Scene = (function () {
       if (o.el.style.display === 'none') return;
       var walking = false;
       if (o.path.length) {
-        var p = o.path[0], dx = p.x - o.x, sp = (k === 'chef' ? 1100 : 700) * (isWide() ? 2.2 : 1) * dt;
+        var p = o.path[0], dx = p.x - o.x, sp = (k === 'chef' ? 1100 : 700) * (is3d() ? 2.2 : 1) * dt;
         if (Math.abs(dx) <= sp) {
           o.x = p.x; o.path.shift();
           if (p.then) p.then();
@@ -629,8 +658,12 @@ var Scene = (function () {
 
   // ---------------- events from the simulation ----------------
   // where a customer is on screen (2D layout, or projected from the 3D view)
+  // where the staff must walk (stage px at the fixed camera) to stand at a station / in front of a customer
+  function stStaffX(i) { return is3d() ? View3D.staffSx(View3D.metrics().geo[i].x) : stationCenter(i).x; }
+  function seatStaffX(c) { return is3d() ? View3D.staffSx(View3D.seatX(c.seat, sh.seats.length)) : custPos(c).x; }
   function custPos(c) {
     var u = CU[c.id];
+    if (u && u.vis === false) return { x: App.W / 2, y: App.H * 0.42, hidden: true };     // first person: behind the player
     if (u) return { x: u.left, y: u.top + 224 - 140 * u.sc };
     var p = seatPos(c.seat, sh.seats.length); return { x: p.x, y: p.top + 224 - 140 * p.sc };
   }
@@ -649,9 +682,8 @@ var Scene = (function () {
           break;
         case 'order': Tuto.onAction('order', e.c); break;
         case 'cook': {
-          var sc = stationCenter(e.st.i);
           var who = e.by === 'commis' ? CH.commis : CH.chef;
-          goTo(who, sc.x, null); who.work = 0.6; setCharMood(who, 'focus'); who.moodT = 0.7;
+          goTo(who, stStaffX(e.st.i), null); who.work = 0.6; setCharMood(who, 'focus'); who.moodT = 0.7;
           Sfx.play('cook');
           break;
         }
@@ -661,11 +693,13 @@ var Scene = (function () {
           var idx = e.c.items.indexOf(e.item), nIt = e.c.items.length;
           var cu2 = CU[e.c.id], scl = cu2 ? cu2.sc : 1, sc3 = nIt >= 3 ? 50 : 60;
           var ix = p.x + (idx - (nIt - 1) / 2) * sc3 * scl;
-          flyDish(e.item.dish, sc2.x, sc2.top + 10, ix, (cu2 ? cu2.top + 224 : L.custBottom) - (224 + 118 - 50) * scl);
+          var from = e.by === 'player' && fpsOn() ? Fps.handsPos() : { x: sc2.x, y: sc2.top + 10 };
+          if (!p.hidden && !(fpsOn() && ST[e.st.i].vis === false && e.by !== 'player'))
+            flyDish(e.item.dish, from.x, from.y, ix, (cu2 ? cu2.top + 224 : L.custBottom) - (224 + 118 - 50) * scl);
           Sfx.play('serve');
           var u = CU[e.c.id]; if (u) u.happyT = 0.5;
-          if (e.by === 'serveur') { goPath(CH.waiter, [{ x: sc2.x }, { x: p.x }]); }
-          else if (e.by !== 'auto') { goTo(CH.chef, sc2.x, null); CH.chef.moodT = 0.6; setCharMood(CH.chef, 'happy'); }
+          if (e.by === 'serveur') { goPath(CH.waiter, [{ x: stStaffX(e.st.i) }, { x: seatStaffX(e.c) }]); }
+          else if (e.by !== 'auto' && e.by !== 'player') { goTo(CH.chef, stStaffX(e.st.i), null); CH.chef.moodT = 0.6; setCharMood(CH.chef, 'happy'); }
           Vib.buzz(15);
           break;
         }
@@ -727,6 +761,26 @@ var Scene = (function () {
 
   function stationRect(i) { var c = stationCenter(i); return { x: c.x, y: c.top, w: COLW, h: ROWH }; }
   function custRect(c) { var p = custPos(c); return { x: p.x, y: L.custBottom - 224 - 118 }; }
+  // the first-person views need the 3D picture: offer to turn it on when it is off
+  function need3d(then) {
+    if (View3D.usable()) { then(); return; }
+    UI.confirm('VUE 3D', 'Le mode Simulateur a besoin de la vue 3D.<br>L’activer maintenant ?', function () {
+      App.save.view3d = true; Store.save(App.save);
+      App.relayout();
+      if (View3D.usable() && !View3D.failed()) then(); else UI.toast('La 3D ne fonctionne pas sur cet appareil.');
+    });
+  }
+  function toggleSim() {
+    var s = App.save;
+    if (mode !== 'hub' || !s.seenTuto.basic || fpsOn()) return;
+    Sfx.play('click');
+    var want = !(s.settings.sim && View3D.usable());
+    if (!want) { s.settings.sim = false; Store.save(s); refreshHud(); UI.toast('Vue gérant : tu diriges la cuisine d’en haut'); return; }
+    need3d(function () {
+      s.settings.sim = true; Store.save(s); refreshHud();
+      UI.toast('Mode Simulateur : tu cuisines et tu sers toi-même, à la première personne');
+    });
+  }
   // keyboard (PC): same thing as a click on the station / the booster
   function pressStation(i) { if (ST[i]) onStation(i); }
   function pressBooster(k) { var id = GD.BOOSTER_ORDER[k]; if (id && E.bst[id].style.display !== 'none') Game.useBooster(id); }
@@ -734,7 +788,7 @@ var Scene = (function () {
   return {
     build: build, layout: layout, setMode: setMode, update: update, refreshStations: refreshStations, refreshHud: refreshHud,
     refreshDecor: refreshDecor, refreshBoosters: refreshBoosters, stationRect: stationRect, custRect: custRect, L: L, E: E,
-    sparkAt: sparkAt, ftext: ftext, mode: function () { return mode; }, v3dState: v3dState, isWide: isWide,
-    pressStation: pressStation, pressBooster: pressBooster
+    sparkAt: sparkAt, ftext: ftext, mode: function () { return mode; }, v3dState: v3dState, isWide: isWide, is3d: is3d,
+    pressStation: pressStation, pressBooster: pressBooster, toggleSim: toggleSim
   };
 })();
