@@ -12,13 +12,13 @@
  ],
  "web": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/game.html",
-  "sha256": "a58c153942e8b2497526667993e1f1725cde165dc13baadaacaa0024f5a8a28a",
-  "size": 5277857
+  "sha256": "318a9f5ee30ebd96ace557447f2c84f270d0936de499bfb0aa2c51ddfab6d03b",
+  "size": 5277812
  },
  "desktop": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/desktop.html",
-  "sha256": "19d31950d7022b93392a8c704c0f867fd2ec6091e45783343e29d9cb255c7f38",
-  "size": 5277898,
+  "sha256": "ad7bac083fffc5de3ddb7004607da3ad1f4491d0134cdf531b21054649ea2f5e",
+  "size": 5277853,
   "minNative": 1,
   "exe": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/download/CuistotTycoon.exe"
  },

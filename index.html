@@ -6905,10 +6905,11 @@ var UI = (function () {
     var I = md.inner;
     board(I, 50, 70, 620, 800, 'b-a');
     leaf(I, 0, 'MISE À JOUR', true);
-    txt(I, 100, 168, 520, '<span class="lg gold" style="font-size:40px">Version ' + (m.label || m.version) + '</span><br><span class="lg" style="font-size:24px;color:#fff6dc">disponible !</span>', 'ptxt', 26);
-    paper(I, 96, 286, 528, 400, 'p-a');
-    var t = txt(I, 130, 316, 460, '<b class="lg" style="font-size:24px">Nouveautés :</b>' + notesHtml(m.notes) + '<div style="margin-top:8px;font-size:18px;opacity:.75">Ta partie est gardée. Tu as la version ' + APP_LABEL + '.</div>', 'ptxt', 21);
+    txt(I, 100, 168, 520, '<span class="lg gold" style="font-size:40px">Version ' + (m.label || m.version) + '</span><br><span class="lg" style="font-size:22px;color:#fff6dc">disponible ! Ta partie est gardée.</span>', 'ptxt', 26);
+    paper(I, 96, 276, 528, 420, 'p-a');
+    var t = txt(I, 126, 302, 468, '<b class="lg" style="font-size:23px">Nouveautés :</b>' + notesHtml(m.notes), 'ptxt', 20);
     t.style.textAlign = 'left';
+    t.querySelector('.unotes').style.fontSize = '19px';
     pill(I, 86, 716, 240, 92, 'PLUS TARD', function () { md.close(); if (onLater) onLater(); }, 'red');
     pill(I, 344, 712, 300, 100, 'METTRE À JOUR', function () { md.close(); onYes(); }).style.fontSize = '27px';
     Sfx.play('soft');
