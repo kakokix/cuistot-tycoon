@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+android/out/
+android/assets/
+android/src/fr/cuistot/tycoon/BuildInfo.java
+desktop/bin/
+desktop/dist/
+desktop/resources/index.html
+desktop/resources/js/
+*.jks
+*.keystore
