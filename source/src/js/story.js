@@ -424,18 +424,47 @@ var Story = (function () {
   function el(tag, cls, parent, html) { return UI.el(tag, cls, parent, html); }
   function px(v) { return Math.round(v) + 'px'; }
 
+  // phones: a 720 px column. Wide screens: the scene uses the whole width, with bigger characters
+  // on each side of a centred dialogue box and the wide picture of the current place behind.
+  function geo() {
+    var W = App.W, H = App.H, wide = !!App.wide, bw = wide ? Math.min(1240, W - 240) : W - 28;
+    return { W: W, H: H, wide: wide, boxTop: H - 300, boxL: (W - bw) / 2, boxW: bw,
+      cxL: wide ? W / 2 - Math.min(400, W * 0.21) : 200, cxR: wide ? W / 2 + Math.min(400, W * 0.21) : 520, k: wide ? 1.22 : 1 };
+  }
+  function applyGeo() {
+    var g = geo();
+    P.g = g; P.boxTop = g.boxTop;
+    P.root.style.height = px(g.H);
+    P.box.style.top = px(g.boxTop); P.box.style.left = px(g.boxL); P.box.style.right = 'auto'; P.box.style.width = px(g.boxW);
+    P.name.style.top = px(g.boxTop - 50);
+    P.sign.style.top = px(Math.max(150, g.boxTop - (g.wide ? 720 : 640)));
+    P.sign.style.left = px((g.W - 340) / 2);
+    P.leafR.style.left = px(g.W - 200);
+    P.counter.style.top = px(g.boxTop - 96);
+    if (P.card.parentNode) P.card.style.top = px(g.H * 0.28);
+    P.slots.L.cx = g.cxL; P.slots.R.cx = g.cxR;
+    P.bg.style.backgroundImage = g.wide ? 'linear-gradient(rgba(8,26,6,.05), rgba(8,22,4,.2) 60%, rgba(5,15,3,.72)), var(--a-bgw_' + GD.locById(App.save.loc || 'jungle').id + ')' : '';
+    ['L', 'R'].forEach(function (k) { var sl = P.slots[k]; if (sl.who) placeSlot(sl, CAST[sl.who]); });
+    if (P.side) nameSide(P.side);
+  }
+  function nameSide(side) {
+    P.side = side;
+    var off = px(P.g.boxL + 30);
+    P.name.style.left = side === 'L' ? off : 'auto'; P.name.style.right = side === 'L' ? 'auto' : off;
+  }
+
   function play(item, done) {
     if (P) end(true);
     var H = App.H, stage = document.getElementById('stage');
     var root = el('div', 'story', stage);
     root.style.height = px(H);
-    el('div', 'st-bg', root);
+    var bg = el('div', 'st-bg', root);
     var boxTop = H - 300;
     // the little restaurant behind the characters: hanging sign, palm leaves, wooden counter
     var sg = el('div', 'st-sign', root, '<div class="ropes"></div><div class="board-s"></div><span>' + esc(App.save.name || 'Chez Cuistot') + '</span>');
     sg.style.top = px(Math.max(150, boxTop - 640));
     el('div', 'roof-leaf st-leaf l', root);
-    el('div', 'roof-leaf st-leaf r', root);
+    var leafR = el('div', 'roof-leaf st-leaf r', root);
     var cnt = el('div', 'st-counter', root);
     cnt.style.top = px(boxTop - 96);
     var slots = {
@@ -450,7 +479,8 @@ var Story = (function () {
     var skip = el('div', 'pill st-skip tap', root, 'PASSER');
     var card = el('div', 'st-card', root, '<div class="leaf"><span class="sm">' + esc(item.kicker || '') + '</span></div><div class="sub">' + esc(fr(item.title || '')) + '</div>');
     card.style.top = px(H * 0.28);
-    P = { root: root, item: item, i: -1, slots: slots, boxTop: boxTop, name: name, box: box, text: text, next: next, card: card, sign: sg, counter: cnt, typing: false, full: '', t0: 0, done: done, raf: 0 };
+    P = { root: root, item: item, i: -1, slots: slots, boxTop: boxTop, name: name, box: box, text: text, next: next, card: card, sign: sg, counter: cnt, bg: bg, leafR: leafR, typing: false, full: '', t0: 0, done: done, raf: 0 };
+    applyGeo();
     skip.addEventListener('click', function (e) { e.stopPropagation(); Sfx.play('click'); end(false); });
     root.addEventListener('click', function () { tap(); });
     Sfx.play('page');
@@ -458,20 +488,9 @@ var Story = (function () {
     loop();
   }
 
-  function layout() {
-    if (!P) return;
-    var H = App.H;
-    P.boxTop = H - 300;
-    P.root.style.height = px(H);
-    P.box.style.top = px(P.boxTop);
-    P.name.style.top = px(P.boxTop - 50);
-    P.sign.style.top = px(Math.max(150, P.boxTop - 640));
-    P.counter.style.top = px(P.boxTop - 96);
-    if (P.card.parentNode) P.card.style.top = px(H * 0.28);
-    ['L', 'R'].forEach(function (k) { var sl = P.slots[k]; if (sl.who) placeSlot(sl, CAST[sl.who]); });
-  }
+  function layout() { if (P) applyGeo(); }
   function placeSlot(sl, cast) {
-    var big = cast.big, w = big ? 520 : 390, h = big ? 520 : 520;
+    var k = P.g.k, w = (cast.big ? 520 : 390) * k, h = 520 * k;
     sl.el.style.width = px(w); sl.el.style.height = px(h);
     sl.el.style.left = px(sl.cx - w / 2);
     sl.el.style.top = px(P.boxTop + 34 - h);
@@ -494,7 +513,7 @@ var Story = (function () {
       sl.el.classList.remove('dim');
       if (other.who) other.el.classList.add('dim');
       P.name.textContent = c.name; P.name.style.display = 'block';
-      P.name.style.left = c.side === 'L' ? '44px' : 'auto'; P.name.style.right = c.side === 'L' ? 'auto' : '44px';
+      nameSide(c.side);
       P.text.classList.remove('narr');
     } else {
       P.name.style.display = 'none';
@@ -621,16 +640,18 @@ var Story = (function () {
   var jTab = 'histoire';
   function openJournal(tab) {
     if (tab) jTab = tab;
-    var H = Math.min(App.H - 40, 1240);
-    var md = UI.modal(H, { tapOutside: false });
+    var wide = App.wide, w = wide ? 1300 : 720;
+    var H = wide ? 1080 : Math.min(App.H - 40, 1240);
+    var md = UI.modal(H, { tapOutside: false, w: w });
     var I = md.inner;
     function render() {
       I.innerHTML = '';
-      var b = UI.el('div', 'board', I); UI.pos(b, 20, 64, 680, H - 70);
-      UI.el('div', 'leaf', I, '<span>CARNET</span>').style.cssText = 'left:125px;top:-6px';
-      var cl = UI.el('div', 'close tap', I); UI.pos(cl, 618, 50);
+      var b = UI.el('div', 'board', I); UI.pos(b, 20, 64, w - 40, H - 70);
+      UI.el('div', 'leaf', I, '<span>CARNET</span>').style.cssText = 'left:' + px((w - 470) / 2) + ';top:-6px';
+      var cl = UI.el('div', 'close tap', I); UI.pos(cl, w - 102, 50);
       cl.addEventListener('click', function (e) { e.stopPropagation(); Sfx.play('click'); md.close(); });
       var tabs = UI.el('div', 'tabs', I); UI.pos(tabs, 70, 160);
+      if (wide) { tabs.style.width = px(w - 140); tabs.style.justifyContent = 'center'; tabs.style.gap = '14px'; }
       [['histoire', 'Histoire'], ['habitues', 'Habitués'], ['succes', 'Succès']].forEach(function (t) {
         var n = t[0] === 'histoire' ? allChapters().filter(function (c) { return chapterUnlocked(c) && !S().story.seen[c.id]; }).length :
           t[0] === 'succes' ? Ach.count() :
@@ -640,8 +661,8 @@ var Story = (function () {
         if (n) UI.el('div', 'badge', tb, n);
         tb.addEventListener('click', function (e) { e.stopPropagation(); Sfx.play('click'); jTab = t[0]; render(); });
       });
-      var pp = UI.el('div', 'paper', I); UI.pos(pp, 46, 236, 628, H - 70 - 200);
-      var list = UI.el('div', 'list', I); UI.pos(list, 80, 268, 562, H - 70 - 200 - 66);
+      var pp = UI.el('div', 'paper', I); UI.pos(pp, 46, 236, w - 92, H - 70 - 200);
+      var list = UI.el('div', 'list' + (wide ? ' cols2' : ''), I); UI.pos(list, 80, 268, w - 158, H - 70 - 200 - 66);
       if (jTab === 'histoire') renderChapters(list, md, render);
       else if (jTab === 'succes') Ach.render(list, render);
       else renderPeople(list, md, render);
@@ -740,6 +761,6 @@ var Story = (function () {
     play: play, playChapter: playChapter, playTale: playTale, afterDay: afterDay,
     openJournal: openJournal, openProfile: openProfile, unreadCount: unreadCount,
     introduced: introduced, taleUnlocked: taleUnlocked, active: function () { return !!P; },
-    skip: function () { if (P) end(false); }, tap: tap, layout: layout
+    skip: function () { if (P) end(false); }, tap: tap, next: tap, layout: layout
   };
 })();

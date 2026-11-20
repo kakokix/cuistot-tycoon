@@ -11,14 +11,20 @@ var Game = (function () {
     sh = null; ended = false;
     Scene.setMode('hub');
     showScreen('title');
+    UI.refreshTitle();
     Sfx.setTempo(96);
     Store.save(App.save);
   }
+  // On a wide screen the title is drawn over the live 3D restaurant: the game screen stays visible
+  // behind it ("titling" hides its HUD and labels).
   function showScreen(name) {
     App.screen = name;
+    var g = document.getElementById('screen-game');
     document.getElementById('screen-title').classList.toggle('on', name === 'title');
-    document.getElementById('screen-game').classList.toggle('on', name === 'game');
+    g.classList.toggle('on', name === 'game' || App.wide);
+    g.classList.toggle('titling', name === 'title');
   }
+  function syncScreens() { showScreen(App.screen); }
   function toHub() {
     sh = null; ended = false; Tuto.hide();
     Scene.setMode('hub');
@@ -117,6 +123,6 @@ var Game = (function () {
     UI.refreshTop();
   }
 
-  return { enterHub: enterHub, toTitle: toTitle, toHub: toHub, startDay: startDay, pause: pause, quitShift: quitShift, update: update,
+  return { enterHub: enterHub, toTitle: toTitle, toHub: toHub, startDay: startDay, pause: pause, quitShift: quitShift, update: update, syncScreens: syncScreens,
     useBooster: useBooster, onShiftEnd: onShiftEnd, onPurchase: onPurchase, isPaused: isPaused, shift: function () { return sh; } };
 })();

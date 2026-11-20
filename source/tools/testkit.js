@@ -11,6 +11,14 @@ window.T = {
   ff: function (sec, bot) {
     var sh = Game.shift(); if (!sh) return 'no shift';
     var act = 0;
+    // fast-forward without drawing the 3D view at every simulated step (very slow with a software renderer)
+    var frame = View3D.frame, n = 0;
+    View3D.frame = function (dt) { if (++n % 40 === 0) frame(dt); };
+    try { T._ff(sh, sec, bot, act); } finally { View3D.frame = frame; }
+    frame(0.016);
+    return 'earned ' + Math.round(sh.earned) + ' t=' + Math.round(sh.timeLeft);
+  },
+  _ff: function (sh, sec, bot, act) {
     for (var t = 0; t < sec; t += 0.05) {
       Game.update(0.05);
       act -= 0.05;
@@ -21,7 +29,6 @@ window.T = {
         if (!done) { var n = sh.needs(); var best = -1, bn = 0; for (var k = 0; k < 8; k++) { var st = sh.stations[k]; if (st.owned && st.cooking.length + st.ready < st.slots && n[k] > bn) { bn = n[k]; best = k; } } if (best >= 0) sh.tapStation(best); }
       }
     }
-    return 'earned ' + Math.round(sh.earned) + ' t=' + Math.round(sh.timeLeft);
   }
 };
 'kit';

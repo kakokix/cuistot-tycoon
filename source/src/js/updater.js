@@ -1,5 +1,8 @@
 // ===================== UPDATES: the installed game checks GitHub and updates itself =====================
 // version.json (on github.com/kakokix/cuistot-tycoon) says which version is the newest.
+// The game looks at it when it starts, then every 2 minutes while it is open (and when its window
+// comes back to the front): no need to close and reopen it to hear about a new version.
+// GitHub itself can take up to about 5 minutes to serve a file that has just been pushed.
 //  - Android: the new game is downloaded by the app (Java) and loaded instead of the bundled one.
 //  - Windows/Linux: the new game is saved next to the .exe and served by the app.
 //  - Web: the page is simply reloaded.
@@ -8,6 +11,8 @@ var Updater = (function () {
   var REPO = 'https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/';
   var DESK_DIR = '/.cuistot_maj', DESK_MOUNT = '/maj';
   var latest = null, busy = false, pending = null, justUpdated = false;
+  var lastCheck = 0, autoT = null;
+  var AUTO_MS = 120000, MIN_GAP = 45000;      // automatic check every 2 min, never more often than every 45 s
 
   function nativeLevel() {
     try { if (window.AndroidBridge) return AndroidBridge.nativeLevel ? AndroidBridge.nativeLevel() : 1; } catch (e) { return 1; }
@@ -70,10 +75,11 @@ var Updater = (function () {
     var url = manifestUrl();
     if (!url) { if (manual) UI.toast('Cette version se met à jour toute seule : tu as déjà la dernière !'); return Promise.resolve(null); }
     if (manual) UI.toast('Recherche de mises à jour…');
+    lastCheck = Date.now();
     return getText(bust(url)).then(function (txt) {
       var m = JSON.parse(txt);
       latest = m;
-      if (m.build > APP_BUILD) { pending = m; maybePrompt(manual); }
+      if (m.build > APP_BUILD) { pending = m; UI.refreshTitle(); maybePrompt(manual); }
       else if (manual) UI.toast('Tu as la dernière version (' + APP_LABEL + ') !');
       return m;
     }).catch(function () {
@@ -92,6 +98,23 @@ var Updater = (function () {
     if (!force && pending.build === App.save.flags.skipBuild) return;
     var m = pending;
     UI.updatePrompt(m, function () { apply(m); }, function () { App.save.flags.skipBuild = m.build; Store.save(App.save); });
+  }
+
+  // ---------------- automatic checks while the game is open ----------------
+  function auto() {
+    if (busy || !App.save || App.visible === false || !manifestUrl()) return;
+    if (Date.now() - lastCheck < MIN_GAP) return;
+    check(false);
+  }
+  function startAuto() {
+    if (autoT) return;
+    var every = AUTO_MS;
+    try { var o = +(window.NL_UPDATEEVERY || localStorage.getItem('cuistot_update_every') || 0); if (o >= 2000) { every = o; MIN_GAP = Math.min(MIN_GAP, o / 2); } } catch (e) { }
+    autoT = setInterval(auto, every);
+    var soon = function () { setTimeout(auto, 1500); };
+    window.addEventListener('focus', soon);
+    window.addEventListener('online', soon);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) soon(); });
   }
 
   // ---------------- install ----------------
@@ -187,9 +210,11 @@ var Updater = (function () {
     }
     Store.save(s);
     setTimeout(function () { check(false); }, 4000);
+    startAuto();
   }
   return {
     check: check, maybePrompt: maybePrompt, apply: apply, desktopBoot: desktopBoot, afterBoot: afterBoot,
-    latest: function () { return latest; }, pending: function () { return pending; }, nativeLevel: nativeLevel
+    latest: function () { return latest; }, pending: function () { return pending; }, nativeLevel: nativeLevel, poke: auto,
+    lastCheck: function () { return lastCheck; }
   };
 })();

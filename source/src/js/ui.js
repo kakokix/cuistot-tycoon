@@ -16,7 +16,7 @@ var UI = (function () {
 
   function board(p, x, y, w, h, k) { return pos(el('div', 'board' + (k ? ' ' + k : ''), p), x, y, w, h); }
   function paper(p, x, y, w, h, k) { return pos(el('div', 'paper' + (k ? ' ' + k : ''), p), x, y, w, h); }
-  function leaf(p, y, txt, sm) { return pos(el('div', 'leaf', p, '<span' + (sm ? ' class="sm"' : '') + '>' + txt + '</span>'), 125, y); }
+  function leaf(p, y, txt, sm, w) { return pos(el('div', 'leaf', p, '<span' + (sm ? ' class="sm"' : '') + '>' + txt + '</span>'), ((w || 720) - 470) / 2, y); }
   function pill(p, x, y, w, h, html, fn, cls) { var b = pos(el('div', 'pill' + (cls ? ' ' + cls : ''), p, html), x, y, w, h); if (fn) onTap(b, fn); return b; }
   function sq(p, x, y, s, icon, fn) { var b = pos(el('div', 'sq', p), x, y, s, s); b.style.backgroundImage = 'var(--a-' + icon + ')'; if (fn) onTap(b, fn); return b; }
   function closeBtn(p, x, y, fn) { return onTap(pos(el('div', 'close', p), x, y), fn); }
@@ -28,7 +28,8 @@ var UI = (function () {
     var m = el('div', 'modal in', layer);
     var inner = el('div', 'inner', m);
     inner.style.height = px(h);
-    var rec = { m: m, inner: inner, h: h, closable: opts.closable !== false, onClose: opts.onClose, onBack: opts.onBack };
+    if (opts.w) inner.style.width = px(opts.w);
+    var rec = { m: m, inner: inner, h: h, w: opts.w || 720, closable: opts.closable !== false, onClose: opts.onClose, onBack: opts.onBack };
     stack.push(rec);
     place(rec);
     if (opts.closable !== false && opts.tapOutside) m.addEventListener('click', function (e) { if (e.target === m) close(rec); });
@@ -36,7 +37,10 @@ var UI = (function () {
     rec.api = api;
     return api;
   }
-  function place(rec) { rec.inner.style.top = px(500 + Math.max(0, (App.H - rec.h) / 2)); }
+  function place(rec) {
+    rec.inner.style.top = px(500 + Math.max(0, (App.H - rec.h) / 2));
+    rec.inner.style.left = px(500 + (App.W - rec.w) / 2);
+  }
   function close(rec, cb) {
     var i = stack.indexOf(rec);
     if (i < 0) { if (cb) cb(); return; }
@@ -76,10 +80,13 @@ var UI = (function () {
   }
 
   // ---------------- title screen ----------------
+  // phones: logo, chef and a big PLAY button. Wide screens: the logo and a menu on the left,
+  // over the live 3D restaurant (the camera travels slowly behind).
   function buildTitle(scr) {
     titleEl = scr;
     scr.innerHTML = '';
     el('div', 't-bg', scr);
+    el('div', 't-shade', scr);
     var logo = el('div', 'logo', scr, '<span class="l1" data-t="CUISTOT"><span class="g">CUISTOT</span></span><br><span class="l2" data-t="TYCOON"><span class="g">TYCOON</span></span><span class="sub">Le resto de la jungle</span>');
     var a1 = el('div', 't-cust', scr); a1.style.backgroundImage = 'var(--a-cu_touriste_happy)';
     var a3 = el('div', 't-cust r', scr); a3.style.backgroundImage = 'var(--a-cu_papi_happy)';
@@ -92,12 +99,27 @@ var UI = (function () {
     var b2 = onTap(el('div', '', row), function () { levels(); }); b2.style.backgroundImage = 'var(--a-big_leader)';
     var b3 = onTap(el('div', '', row), function () { help(); }); b3.style.backgroundImage = 'var(--a-big_about)';
     if (Platform.canExit()) { var b4 = onTap(el('div', '', row), function () { confirmExit(); }); b4.style.backgroundImage = 'var(--a-b_close)'; b4.style.backgroundSize = '92%'; }
+    // wide screens
+    var menu = el('div', 't-menu', scr);
+    var mplay = onTap(el('div', 'tm-btn play', menu, '<b>JOUER</b><small></small>'), function () { Game.enterHub(); });
+    onTap(el('div', 'tm-btn', menu, '<i style="background-image:var(--a-b_prize)"></i>NIVEAUX'), function () { levels(); });
+    onTap(el('div', 'tm-btn', menu, '<i style="background-image:var(--a-b_settings)"></i>PARAMÈTRES'), function () { settings(); });
+    onTap(el('div', 'tm-btn', menu, '<i style="background-image:var(--a-big_about)"></i>AIDE'), function () { help(); });
+    if (Platform.canExit()) onTap(el('div', 'tm-btn quit', menu, '<i style="background-image:var(--a-b_close)"></i>QUITTER'), function () { confirmExit(); });
+    var hint = el('div', 't-hint', scr, '<i class="key wide-key">Entrée</i> jouer' + (Platform.kind === 'desktop' ? ' &nbsp; <i class="key wide-key">F11</i> plein écran' : ''));
+    var upd = onTap(el('div', 't-upd', scr), function () { Updater.maybePrompt(true); });
     el('div', 't-ver' + (/test/.test(APP_VERSION) ? ' test' : ''), scr, 'v' + APP_LABEL);
-    titleEl._p = { logo: logo, a1: a1, a3: a3, chef: chef, counter: counter, play: play, lab: lab, row: row };
+    titleEl._p = { logo: logo, a1: a1, a3: a3, chef: chef, counter: counter, play: play, lab: lab, row: row, menu: menu, mplay: mplay, upd: upd, hint: hint };
     layoutTitle();
+    refreshTitle();
   }
   function layoutTitle() {
     var p = titleEl._p, H = App.H;
+    if (App.wide) {
+      p.logo.style.top = px(H * 0.075);
+      p.menu.style.top = px(H * 0.075 + 392);
+      return;
+    }
     var logoTop = Math.round(H * 0.05);
     p.logo.style.top = px(logoTop);
     var chefS = Util.clamp(Math.round(300 + (H - 1280) * 0.4), 290, 370);
@@ -111,6 +133,16 @@ var UI = (function () {
     pos(p.play, 360 - playS / 2, counterTop + 100, playS, playS);
     p.lab.style.top = px(counterTop + 100 + playS - 14);
     p.row.style.top = px(Math.max(H * 0.84, counterTop + 100 + playS + 44));
+  }
+  // what changes on the title while the game runs: the save (day, level) and a waiting update
+  function refreshTitle() {
+    if (!titleEl || !titleEl._p || !App.save) return;
+    var p = titleEl._p, s = App.save, old = (s.stats.days || 0) > 0 || s.unlocked > 1;
+    p.mplay.querySelector('b').textContent = old ? 'CONTINUER' : 'JOUER';
+    p.mplay.querySelector('small').textContent = old ? 'Jour ' + s.unlocked + ' • Chef niveau ' + s.level : 'Nouvelle partie';
+    var m = window.Updater && Updater.pending();
+    p.upd.style.display = m ? 'flex' : 'none';
+    if (m) p.upd.innerHTML = '<b>!</b> Version ' + (m.label || m.version) + ' disponible : <u>installer</u>';
   }
   function confirmExit() {
     confirm('QUITTER ?', 'Tu veux vraiment quitter le jeu ?<br>Ta partie est sauvegardée.', function () { Store.save(App.save); Platform.exit(); });
@@ -308,17 +340,19 @@ var UI = (function () {
   var shopTab = 'station';
   function shop(tab) {
     if (tab) shopTab = tab;
-    var H = Math.min(App.H - 40, 1240);
-    var md = modal(H, { tapOutside: false });
+    var wide = App.wide, w = wide ? 1300 : 720;
+    var H = wide ? 1080 : Math.min(App.H - 40, 1240);
+    var md = modal(H, { tapOutside: false, w: w });
     var I = md.inner;
-    board(I, 20, 64, 680, H - 70);
-    leaf(I, -6, 'BOUTIQUE');
-    closeBtn(I, 618, 50, function () { md.close(); });
+    board(I, 20, 64, w - 40, H - 70);
+    leaf(I, -6, 'BOUTIQUE', false, w);
+    closeBtn(I, w - 102, 50, function () { md.close(); });
     var cb = el('div', 'coinbox', I, '<img src="' + Art.coin() + '"><span></span>');
-    cb.style.cssText = 'left:236px;top:150px;width:248px;height:58px';
+    cb.style.cssText = 'left:' + px((w - 248) / 2) + ';top:150px;width:248px;height:58px';
     var tabs = el('div', 'tabs', I); pos(tabs, 58, 222);
-    paper(I, 46, 286, 628, H - 70 - 250);
-    var list = pos(el('div', 'list', I), 80, 318, 562, H - 70 - 250 - 66);
+    if (wide) { tabs.style.width = px(w - 116); tabs.style.justifyContent = 'center'; tabs.style.gap = '14px'; }
+    paper(I, 46, 286, w - 92, H - 70 - 250);
+    var list = pos(el('div', 'list' + (wide ? ' cols2' : ''), I), 80, 318, w - 158, H - 70 - 250 - 66);
     function renderTabs() {
       tabs.innerHTML = '';
       var offs = Progress.offers(App.save);
@@ -475,13 +509,14 @@ var UI = (function () {
       }
       slider('Musique', 'music');
       slider('Effets', 'sfx');
-      toggle('Vibrations', function () { return App.save.settings.vibra; }, function (v) { App.save.settings.vibra = v; if (v) Vib.buzz(40); });
-      if (Platform.canFullscreen()) toggle('Plein écran', function () { return Platform.isFullscreen(); }, function () { Platform.toggleFullscreen(); });
+      if (window.AndroidBridge || (navigator.vibrate && ('ontouchstart' in window || navigator.maxTouchPoints > 0))) toggle('Vibrations', function () { return App.save.settings.vibra; }, function (v) { App.save.settings.vibra = v; if (v) Vib.buzz(40); });
+      if (Platform.canFullscreen()) toggle('Plein écran', function () { return Platform.isFullscreen(); }, function (v) { setFullscreen(v); });
       toggle('Rappel de pause', function () { return App.save.settings.pause !== false; }, function (v) { App.save.settings.pause = v; });
-      if (window.View3D && View3D.supported()) toggle('Vue 3D (test)', function () { return !!App.save.view3d; }, function (v) {
+      if (window.View3D && View3D.supported()) toggle('Vue 3D', function () { return !!App.save.view3d; }, function (v) {
         App.save.view3d = v; Store.save(App.save);
-        var ok = View3D.apply();
-        toast(ok ? 'Vue 3D activée (version test)' : v ? 'La vue 3D n’est pas disponible ici' : 'Vue 2D classique');
+        App.relayout();
+        var ok = View3D.active();
+        toast(ok ? (App.wide ? 'Vue 3D grand écran activée' : 'Vue 3D activée') : v ? 'La vue 3D n’est pas disponible ici' : 'Vue classique (sans 3D)');
       });
       var mr = pos(el('div', 'srow', I), 100, y, 520); y += 92;
       el('div', 'lab ctxt', mr, 'Mode').style.color = '#fff6dc';
@@ -524,13 +559,24 @@ var UI = (function () {
       [ASSETS.chef_happy, 'Entre deux journées, <b>améliore</b> tes stations, embauche, décore et investis : deviens un vrai Tycoon !'],
       [Art.book(), 'Ouvre le <b>Carnet</b> pour suivre l\'histoire du restaurant. Sers souvent tes <b>habitués</b> pour découvrir leurs histoires.']
     ];
-    var y = 212;
+    var kb = document.getElementById('app').classList.contains('keys');
+    if (kb) steps.push([keyIcon(), 'Au <b>clavier</b> : <b>1</b> à <b>8</b> pour cuisiner, <b>A Z E R</b> pour les bonus, <b>Espace</b> pour la pause, <b>Échap</b> pour revenir.']);
+    var y = kb ? 198 : 212, dy = kb ? 103 : 118, isz = kb ? 80 : 92;
     steps.forEach(function (s) {
-      var im = pos(el('img', '', I), 108, y, 92, 92); im.src = s[0]; im.style.position = 'absolute'; im.style.objectFit = 'contain';
-      var t = txt(I, 212, y + 4, 400, s[1], 'ptxt', 22); t.style.textAlign = 'left';
-      y += 118;
+      var im = pos(el('img', '', I), 108, y, isz, isz); im.src = s[0]; im.style.position = 'absolute'; im.style.objectFit = 'contain';
+      var t = txt(I, 212, y + (kb ? 0 : 4), 408, s[1], 'ptxt', kb ? 20 : 22); t.style.textAlign = 'left';
+      y += dy;
     });
     pill(I, 235, 956, 250, 86, 'COMPRIS !', function () { md.close(); });
+  }
+
+  function keyIcon() {
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect x="8" y="14" width="80" height="72" rx="14" fill="#6b3a14"/><rect x="12" y="12" width="72" height="62" rx="12" fill="#fff6dc" stroke="#6b3a14" stroke-width="4"/><text x="48" y="58" font-family="Arial,sans-serif" font-weight="700" font-size="40" text-anchor="middle" fill="#6b3a14">1</text></svg>');
+  }
+  // full screen (PC): remembered for the next launch of the installed game
+  function setFullscreen(v) {
+    if (Platform.isFullscreen() !== !!v) Platform.toggleFullscreen();
+    if (App.save) { App.save.settings.fullscreen = !!v; Store.save(App.save); }
   }
 
   // ---------------- init ----------------
@@ -641,17 +687,25 @@ var UI = (function () {
     init: init, layout: layout, modal: modal, closeAll: closeAll, isBlocking: isBlocking, back: back, toast: toast, banner: banner,
     confirm: confirm, confirmExit: confirmExit, pause: pause, results: results, levelUp: levelUp, chainLevelUps: chainLevelUps, offline: offline,
     stationPopup: stationPopup, shop: shop, levels: levels, settings: settings, help: help, applySettings: applySettings, refreshTop: refreshTop,
-    buildTitle: buildTitle, el: el, pos: pos, reward: reward, chooseMode: chooseMode, breakReminder: breakReminder,
+    buildTitle: buildTitle, refreshTitle: refreshTitle, setFullscreen: setFullscreen, el: el, pos: pos, reward: reward, chooseMode: chooseMode, breakReminder: breakReminder,
     updatePrompt: updatePrompt, updateProgress: updateProgress, whatsNew: whatsNew
   };
 })();
 
 // ===================== TUTORIAL =====================
 var Tuto = (function () {
-  var box = null, block = false, step = '';
+  var box = null, block = false, step = '', last = null;
   function seen(id) { return App.save.seenTuto[id]; }
+  function kb() { return Scene.isWide() && document.getElementById('app').classList.contains('keys'); }
   function mark(id) { App.save.seenTuto[id] = 1; Store.save(App.save); }
-  function hide() { if (box) { box.remove(); box = null; } block = false; step = ''; }
+  function hide() { if (box) { box.remove(); box = null; } block = false; step = ''; last = null; }
+  // the layout changed (window resized between portrait and wide): put the current tip back in place
+  function relayout() {
+    if (!box || !last) return;
+    var l = last;
+    if (l.id.indexOf('hub') === 0) { hide(); hubCheck(); }
+    else show(l.id, l.html, l.id === 't1' ? stTarget(0) : l.id === 't3' ? stTarget(0, 0) : null, l.opts);
+  }
   function show(id, html, target, opts) {
     hide();
     opts = opts || {};
@@ -659,8 +713,13 @@ var Tuto = (function () {
     var layer = document.getElementById('stage');
     box = UI.el('div', 'tuto', layer);
     var tip = UI.el('div', 'tip', box, html);
-    var sh = Game.shift();
-    tip.style.top = Math.round(opts.top != null ? opts.top : (sh && !sh.over ? Scene.L.row2 + 8 : App.H * 0.17)) + 'px';
+    var sh = Game.shift(), busy = sh && !sh.over;
+    last = { id: id, html: html, target: target, opts: opts };
+    if (Scene.isWide()) {
+      // wide screen: during a day the tip sits at the bottom, on the worktop, away from customers and stations
+      if (busy && !opts.ok) { tip.style.top = 'auto'; tip.style.bottom = '14px'; }
+      else tip.style.top = Math.round(App.H * (busy ? 0.3 : 0.16)) + 'px';
+    } else tip.style.top = Math.round(opts.top != null ? opts.top : (busy ? Scene.L.row2 + 8 : App.H * 0.17)) + 'px';
     if (opts.ok) {
       block = true;
       var b = UI.el('div', 'pill ok tap', tip, 'OK !');
@@ -678,7 +737,7 @@ var Tuto = (function () {
       if (type === 'stationPopup' && step === 'hub1') { hide(); mark('hub1'); }
       return;
     }
-    if (type === 'order' && !step) show('t1', 'Un client ! Il veut un <b>burger</b>.<br>Touche le <b>grill</b> pour le cuire.', stTarget(0));
+    if (type === 'order' && !step) show('t1', 'Un client ! Il veut un <b>burger</b>.<br>' + (kb() ? 'Clique sur le <b>grill</b> (ou appuie sur la touche <b>1</b>) pour le cuire.' : 'Touche le <b>grill</b> pour le cuire.'), stTarget(0));
     else if (type === 'station' && step === 't1' && a === 0 && b === 'cook') show('t2', App.save.mode === 'classique' ? 'Ça cuit ! Attends que le burger soit prêt…' : 'Ça cuit ! Le burger sera servi tout seul dès qu’il sera prêt.', null);
     else if (type === 'ready' && (step === 't2' || step === 't1') && a === 0) { if (App.save.mode === 'classique') show('t3', 'Le burger est prêt !<br><b>Touche-le</b> pour le servir.', stTarget(0, 0)); }
     else if (type === 'pay' && step) {
@@ -689,7 +748,7 @@ var Tuto = (function () {
   function hubCheck() {
     var s = App.save;
     if (!seen('basic')) {
-      show('hub0', 'Bienvenue Chef ! Les clients de la jungle ont faim.<br>Touche <b>OUVRIR</b> pour lancer ta première journée !', { x: 380, y: Scene.L.botTop + 10, dy: 0 }, { top: App.H * 0.2 });
+      show('hub0', 'Bienvenue Chef ! Les clients de la jungle ont faim.<br>' + (kb() ? 'Clique sur' : 'Touche') + ' <b>OUVRIR</b> pour lancer ta première journée !', { x: App.W / 2 + 20, y: Scene.L.botTop + 10, dy: 0 }, { top: App.H * 0.2 });
       return;
     }
     if (!seen('hub1') && s.coins >= GD.upgradeCost(GD.STATIONS[0], s.stations.grill || 1)) {
@@ -701,5 +760,5 @@ var Tuto = (function () {
       mark('hub2');
     }
   }
-  return { onAction: onAction, hubCheck: hubCheck, hide: hide, blocking: function () { return block; }, step: function () { return step; } };
+  return { onAction: onAction, hubCheck: hubCheck, hide: hide, relayout: relayout, blocking: function () { return block; }, step: function () { return step; } };
 })();

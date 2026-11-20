@@ -4,8 +4,12 @@ URL = sys.argv[1]; OUT = sys.argv[2]
 KIT = open('tools/testkit.js').read()
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch()
-        pg = await b.new_page(viewport={'width': 405, 'height': 860})
+        # optional: viewport (e.g. 1600 900 for the wide PC layout) and number of days
+        VW = int(sys.argv[4]) if len(sys.argv) > 4 else 405
+        VH = int(sys.argv[5]) if len(sys.argv) > 5 else 860
+        DAYS = int(sys.argv[6]) if len(sys.argv) > 6 else 15
+        b = await p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
+        pg = await b.new_page(viewport={'width': VW, 'height': VH})
         errs = []
         pg.on('pageerror', lambda e: errs.append('PAGEERR ' + str(e)))
         pg.on('console', lambda m: errs.append(m.text) if m.type == 'error' else None)
@@ -15,7 +19,8 @@ async def main():
         await pg.evaluate("App.save.seenTuto.basic=1; App.save.seenTuto.mode=1; App.save.story.seen.prologue=1; App.save.mode='%s'; Game.enterHub()" % MODE)
         stories = []
         log = []
-        for day in range(1, 16):
+        print('layout:', await pg.evaluate("(App.wide ? 'wide ' : 'portrait ') + App.W + 'x' + Math.round(App.H) + ' 3d=' + View3D.active()"))
+        for day in range(1, DAYS + 1):
             await pg.evaluate("Game.startDay(App.save.unlocked)")
             await pg.wait_for_timeout(2300)
             # use some boosters mid-day
@@ -23,6 +28,9 @@ async def main():
                 ['turbo','coeur','temps','chance'].forEach(function(id){ Game.useBooster(id); });
                 out.push(T.ff(200,true)); return out.join(' '); })()""")
             await pg.wait_for_timeout(2600)
+            for k in range(12):      # the results window comes after the closing banner
+                if await pg.evaluate("document.querySelectorAll('.modal').length > 0 || Story.active()"): break
+                await pg.wait_for_timeout(300)
             info = await pg.evaluate("""(function(){var sh=Game.shift(); return {day: sh.day, win: sh.win, stars: sh.stars, earned: Math.round(sh.earned), goal: sh.goal, served: sh.served, lost: sh.lost, modals: document.querySelectorAll('.modal').length}})()""")
             # click through results + level ups -> hub
             for k in range(14):

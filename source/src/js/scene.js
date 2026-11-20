@@ -7,6 +7,7 @@ var Scene = (function () {
   var GRR = ['Trop long !', 'Je m\'en vais !', 'Inadmissible !', 'Plus jamais !', 'Quelle attente !'];
   function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
   var COLW = 164, COLG = 10, COL0 = 16, ROWH = 168;
+  var BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';   // <img> drawn with a CSS background
 
   function el(tag, cls, parent, html) {
     var e = document.createElement(tag);
@@ -18,7 +19,10 @@ var Scene = (function () {
   function px(v) { return Math.round(v) + 'px'; }
   function fmt(n) { return Util.fmt(n); }
 
+  // wide (PC) layout: the whole screen is the 3D restaurant, the HTML layer follows the 3D objects
+  function isWide() { return !!(window.View3D && View3D.isWide()); }
   function stationCenter(i) {
+    if (isWide()) { var o = ST[i]; return { x: o.sx, y: o.sy - o.ph / 2, top: o.sy - o.ph }; }
     var c = i % 4, r = Math.floor(i / 4);
     return { x: COL0 + c * (COLW + COLG) + COLW / 2, y: (r === 0 ? L.row1 : L.row2) + ROWH / 2, top: r === 0 ? L.row1 : L.row2 };
   }
@@ -26,10 +30,16 @@ var Scene = (function () {
     var sp = n >= 5 ? 136 : n === 4 ? 165 : 200;
     return 360 + (i - (n - 1) / 2) * sp;
   }
+  // where a seat is on screen before its customer exists
+  function seatPos(seat, n) {
+    if (isWide()) return View3D.seatScreen(seat, n);
+    return { x: seatX(seat, n), top: L.custBottom - 224, sc: n >= 5 ? 0.82 : n === 4 ? 0.93 : 1 };
+  }
 
   // ---------------- build ----------------
   function build(container) {
     root = container;
+    E.vig = el('div', 'vignette', root);
     E.dining = el('div', 'dining-bg', root);
     E.lanterns = el('div', 'lanterns', root);
     E.sign = el('div', 'sign', root, '<div class="ropes"></div><div class="board-s"></div><div class="bulbs"></div><span></span>');
@@ -57,33 +67,36 @@ var Scene = (function () {
     E.coins = el('div', 'coinbox', root, '<img><span>0</span>');
     E.coins.querySelector('img').src = Art.coin();
     E.setBtn = el('div', 'sq tap', root); E.setBtn.style.cssText = 'left:604px;top:2px;width:92px;height:92px;background-image:var(--a-b_settings)';
-    E.bookBtn = el('div', 'bookbtn tap', root, '<img><div class="badge">!</div>');
+    E.bookBtn = el('div', 'bookbtn tap', root, '<img><div class="badge">!</div><i class="key">C</i>');
     E.bookBtn.querySelector('img').src = Art.book();
     E.bookBtn.addEventListener('click', function () { Sfx.play('click'); Story.openJournal(); });
     E.pauseBtn = el('div', 'sq tap', root); E.pauseBtn.style.cssText = 'left:18px;top:2px;width:92px;height:92px;background-image:var(--a-b_pause)';
-    E.timer = el('div', 'timer', root, '<img src="' + '' + '"><span>1:30</span>');
+    E.timer = el('div', 'timer', root, '<img src="' + BLANK + '"><span>1:30</span>');
     E.timer.querySelector('img').style.cssText = 'background:var(--a-clock) center/contain no-repeat';
     E.timer.style.left = '560px';
+    E.plaque = el('div', 'plaque', root, '<span></span><small></small>');
     E.goal = el('div', 'goalbar', root, '<div class="trk"><div class="fill"></div></div><div class="txt">0 / 100</div><i class="mk"></i><i class="mk"></i><i class="mk"></i><div class="hearts"></div>');
     E.hearts = E.goal.querySelector('.hearts');
     for (var h = 0; h < 5; h++) el('i', '', E.hearts);
     E.hudBot = el('div', 'hud-bot', root);
     // hub bottom
     E.hub = el('div', 'hub-bot', root);
-    E.shopBtn = el('div', 'sq tap', E.hub); E.shopBtn.style.cssText = 'left:48px;background-image:var(--a-b_shop)';
+    E.shopBtn = el('div', 'sq tap', E.hub, '<i class="key">B</i>'); E.shopBtn.style.cssText = 'left:48px;background-image:var(--a-b_shop)';
     el('div', 'lab ctxt', E.hub, 'Boutique').style.left = '30px';
     E.shopBadge = el('div', 'badge', E.shopBtn, '!'); E.shopBadge.style.cssText = 'right:-4px;top:-4px';
-    E.openBtn = el('div', 'open-btn tap', E.hub, '<b>OUVRIR</b><small>Jour 1</small>');
-    E.mapBtn = el('div', 'mapbtn tap', E.hub, '<div class="badge">!</div>');
+    E.openBtn = el('div', 'open-btn tap', E.hub, '<b>OUVRIR</b><small>Jour 1</small><i class="key">Entrée</i>');
+    E.mapBtn = el('div', 'mapbtn tap', E.hub, '<div class="badge">!</div><i class="key">M</i>');
     E.mapLab = el('div', 'lab ctxt', E.hub, 'Carte');
     E.mapBtn.addEventListener('click', function () { Sfx.play('click'); World.open(); });
-    E.lvBtn = el('div', 'sq tap', E.hub); E.lvBtn.style.cssText = 'left:568px;background-image:var(--a-b_prize)';
+    E.lvBtn = el('div', 'sq tap', E.hub, '<i class="key">N</i>'); E.lvBtn.style.cssText = 'left:568px;background-image:var(--a-b_prize)';
     el('div', 'lab ctxt', E.hub, 'Niveaux').style.left = '550px';
     // boosters
     E.boosts = el('div', 'boosts', root);
     E.bst = {};
     GD.BOOSTER_ORDER.forEach(function (id) {
-      var b = el('div', 'rnd tap', E.boosts, '<img><div class="badge">0</div><div class="tm ctxt"></div>');
+      var b = el('div', 'rnd tap', E.boosts, '<img><div class="badge">0</div><div class="tm ctxt"></div><i class="key">' + 'AZER'.charAt(GD.BOOSTER_ORDER.indexOf(id)) + '</i>');
+      b.title = GD.BOOSTERS[id].name + ' : ' + GD.BOOSTERS[id].desc;
+      b.querySelector('img').src = BLANK;
       b.querySelector('img').style.cssText = 'background:var(--a-' + GD.BOOSTERS[id].icon + ') center/contain no-repeat';
       b.addEventListener('pointerdown', function (ev) { ev.preventDefault(); Game.useBooster(id); });
       E.bst[id] = b;
@@ -101,7 +114,7 @@ var Scene = (function () {
     var c = el('div', 'chr', E.lane);
     c.style.width = px(w); c.style.height = px(h);
     var o = { el: c, kind: kind, w: w, h: h, x: kind === 'chef' ? 360 : kind === 'commis' ? 200 : 520, tx: null, path: [], mood: '', moodT: 0, work: 0, dir: 1, y: 0 };
-    o.x0 = o.x;
+    o.x0 = o.xp = o.x;      // xp: home position in the portrait layout
     return o;
   }
   function setCharMood(o, mood) {
@@ -119,16 +132,26 @@ var Scene = (function () {
     s.innerHTML = '<div class="tile"></div><div class="boost-fx"></div><div class="sti"></div><div class="prog prog2"><i></i></div><div class="prog"><i></i></div>' +
       '<div class="nm"></div><div class="lv"></div><div class="ready"></div><div class="over"></div><div class="upg"></div>';
     var o = { el: s, i: i, def: GD.STATIONS[i], sti: s.querySelector('.sti'), prog: s.querySelectorAll('.prog i'), progBox: s.querySelectorAll('.prog'),
-      nm: s.querySelector('.nm'), lv: s.querySelector('.lv'), ready: s.querySelector('.ready'), over: s.querySelector('.over'), nReady: -1, state: '' };
+      nm: s.querySelector('.nm'), lv: s.querySelector('.lv'), ready: s.querySelector('.ready'), over: s.querySelector('.over'), nReady: -1, state: '',
+      sx: 0, sy: 0, ph: 0, hover: false, bumpT: 0 };
     o.sti.style.backgroundImage = Art.stationBg(o.def.id);
-    o.nm.textContent = o.def.name;
+    o.nm.innerHTML = '<i class="key">' + (i + 1) + '</i><span>' + o.def.name + '</span>';
     s.addEventListener('pointerdown', function (ev) { ev.preventDefault(); onStation(i); });
+    // mouse: the 3D station reacts when the pointer is over it
+    s.addEventListener('pointerenter', function (ev) { if (ev.pointerType === 'mouse') o.hover = true; });
+    s.addEventListener('pointerleave', function () { o.hover = false; });
     return o;
   }
 
   // ---------------- layout ----------------
   function layout(H) {
-    L.H = H;
+    L.H = H; L.W = App.W;
+    if (isWide()) layoutWide(H); else layoutPortrait(H);
+    Object.keys(CH).forEach(function (k) { var o = CH[k]; o.x = o.x0; o.path = []; o.el.style.left = px(o.x - o.w / 2); });
+    placeHud();
+    layoutSeats();
+  }
+  function layoutPortrait(H) {
     L.botTop = H - 112;
     L.row2 = L.botTop - 6 - ROWH;
     L.row1 = L.row2 - 12 - ROWH;
@@ -153,25 +176,77 @@ var Scene = (function () {
     E.leafR.style.cssText = 'left:530px;top:110px;transform:scaleX(-1) rotate(32deg)';
     E.hudTop.style.top = '-65px';
     E.hudBot.style.top = px(L.botTop - 22);
-    E.hub.style.top = px(L.botTop);
-    E.boosts.style.top = px(L.botTop);
+    root.style.removeProperty('--sp');
     for (var i = 0; i < 8; i++) {
-      var c = i % 4, r = Math.floor(i / 4);
-      ST[i].el.style.left = px(COL0 + c * (COLW + COLG));
-      ST[i].el.style.top = px(r === 0 ? L.row1 : L.row2);
+      var c = i % 4, r = Math.floor(i / 4), o = ST[i];
+      o.el.style.width = ''; o.el.style.height = '';
+      o.el.style.left = px(COL0 + c * (COLW + COLG));
+      o.el.style.top = px(r === 0 ? L.row1 : L.row2);
     }
     Object.keys(CH).forEach(function (k) {
       var o = CH[k];
+      o.x0 = o.xp;
       o.baseTop = L.laneBottom - o.h - (k === 'waiter' ? 10 : k === 'commis' ? 4 : 0);
       o.el.style.top = px(o.baseTop);
-      o.el.style.left = px(o.x - o.w / 2);
     });
-    layoutSeats();
     if (window.View3D) View3D.layout();
+  }
+  function layoutWide(H) {
+    View3D.layout();                      // camera first: the stations are placed where the 3D puts them
+    var m = View3D.metrics(), W = App.W;
+    L.botTop = H - 126;
+    L.counterTop = m.counterY; L.custBottom = m.counterY + 16;
+    root.style.setProperty('--sp', Math.round(m.geo[0].pw) + 'px');
+    for (var i = 0; i < 8; i++) {
+      var g = m.geo[i], o = ST[i];
+      o.sx = g.sx; o.sy = g.base; o.ph = g.ph;
+      o.el.style.width = px(g.pw); o.el.style.height = px(g.ph);
+      o.el.style.left = px(g.sx - g.pw / 2); o.el.style.top = px(g.base - g.ph);
+    }
+    CH.chef.x0 = W / 2; CH.commis.x0 = W / 2 - m.geo[0].pw * 1.5; CH.waiter.x0 = W / 2 + m.geo[0].pw * 1.5;
+    Object.keys(CH).forEach(function (k) { CH[k].baseTop = 0; });
+  }
+  // HUD: a 720 px column on phones, spread over the whole screen on a PC
+  function placeHud() {
+    var wide = isWide(), W = App.W, hub = mode === 'hub';
+    function at(e, x, y) { e.style.left = px(x); e.style.top = y == null ? '' : px(y); }
+    if (wide) {
+      at(E.lvl, 30, 24);
+      at(E.coins, hub ? 252 : 36, 30);
+      at(E.bookBtn, W - 232, 16); at(E.setBtn, W - 124, 16);
+      at(E.timer, W - 300, 30); at(E.pauseBtn, W - 124, 16);
+      L.goalW = Math.min(900, W - 760);
+      E.goal.style.left = px((W - L.goalW) / 2); E.goal.style.right = 'auto'; E.goal.style.width = px(L.goalW); E.goal.style.top = '18px';
+      E.plaque.style.left = px((W - 460) / 2);
+      E.hub.style.left = E.boosts.style.left = px((W - 720) / 2);
+      // room to spare: the map button sits to the left of the shop instead of squeezing the big button
+      E.openBtn.style.left = '200px'; E.openBtn.style.width = '320px';
+      E.mapBtn.style.left = '-92px'; E.mapLab.style.left = '-112px';
+    } else {
+      at(E.lvl, 14, 8);
+      at(E.coins, hub ? 232 : 186, 14);
+      at(E.bookBtn, 508, 2); at(E.setBtn, 604, 2);
+      at(E.timer, 560, 14); at(E.pauseBtn, 18, 2);
+      L.goalW = 672;
+      E.goal.style.left = ''; E.goal.style.right = ''; E.goal.style.width = ''; E.goal.style.top = '';
+      E.hub.style.left = E.boosts.style.left = '0px';
+      E.openBtn.style.left = L.showMap ? '238px' : '200px';
+      E.openBtn.style.width = L.showMap ? '290px' : '320px';
+      E.mapBtn.style.left = ''; E.mapLab.style.left = '';
+    }
+    E.hub.style.top = E.boosts.style.top = px(L.botTop);
+    L.goalX = wide ? (W - L.goalW) / 2 : 24; L.goalY = wide ? 18 : 92;
+    L.coinX = parseFloat(E.coins.style.left) + 20; L.coinY = wide ? 62 : 46;
+    L.timerX = parseFloat(E.timer.style.left) + 60;
+    if (sh) updateGoal(true);
   }
   function layoutSeats() {
     var n = sh ? sh.seats.length : GD.seatsFor(App.save);
-    Object.keys(CU).forEach(function (id) { var u = CU[id]; u.el.style.left = px(seatX(u.c.seat, n)); });
+    Object.keys(CU).forEach(function (id) {
+      var u = CU[id], p = seatPos(u.c.seat, n);
+      u.left = p.x; u.top = p.top; u.sc = p.sc;
+      u.el.style.left = px(p.x); u.el.style.top = px(p.top); u.el.style.transform = 'scale(' + p.sc + ')';
+    });
   }
 
   // ---------------- decor & hub refresh ----------------
@@ -199,7 +274,10 @@ var Scene = (function () {
         n.style.left = px(i * 26); n.style.animationDelay = (i * 0.85) + 's';
       }
     }
-    E.sign.querySelector('span').textContent = loc.id === 'jungle' ? (s.name || 'Chez Cuistot') : loc.resto;
+    var restoName = loc.id === 'jungle' ? (s.name || 'Chez Cuistot') : loc.resto;
+    E.sign.querySelector('span').textContent = restoName;
+    E.plaque.querySelector('span').textContent = restoName;
+    E.plaque.querySelector('small').textContent = loc.name + ' • Jour ' + s.unlocked;
     E.sign.classList.toggle('lit', d.enseigne >= 2);
     var bulbs = E.sign.querySelector('.bulbs');
     bulbs.innerHTML = '';
@@ -249,7 +327,7 @@ var Scene = (function () {
     E.goal.style.display = hub ? 'none' : 'block';
     E.hub.style.display = hub ? 'block' : 'none';
     E.boosts.style.display = hub ? 'none' : 'flex';
-    E.coins.style.left = hub ? '232px' : '186px';
+    E.plaque.style.display = hub ? '' : 'none';
     E.lvl.querySelector('.st').textContent = s.level;
     E.lvl.querySelector('.xb i').style.width = px(4 + 128 * Math.min(1, s.xp / GD.xpNeed(s.level)));
     E.openBtn.querySelector('small').textContent = 'Jour ' + s.unlocked;
@@ -257,13 +335,13 @@ var Scene = (function () {
     E.bookBtn.style.display = hub ? 'flex' : 'none';
     var places = GD.LOCATIONS.filter(function (l) { return GD.locUnlocked(s, l.id); }).length;
     var showMap = hub && places > 1;
+    L.showMap = showMap;
     E.mapBtn.style.display = E.mapLab.style.display = showMap ? 'block' : 'none';
-    E.openBtn.style.left = showMap ? '238px' : '200px';
-    E.openBtn.style.width = showMap ? '290px' : '320px';
     var newPlace = GD.LOCATIONS.some(function (l) { return GD.locUnlocked(s, l.id) && !(s.flags.visited || {})[l.id] && l.id !== 'jungle'; });
     E.mapBtn.querySelector('.badge').style.display = newPlace ? 'flex' : 'none';
     var nb = Story.unreadCount(), bb = E.bookBtn.querySelector('.badge');
     bb.style.display = nb ? 'flex' : 'none'; bb.textContent = nb;
+    placeHud();
     refreshBoosters();
   }
   function refreshBoosters() {
@@ -297,6 +375,7 @@ var Scene = (function () {
   // ---------------- input ----------------
   function onStation(i) {
     if (UI.isBlocking()) return;
+    ST[i].bumpT = performance.now();
     if (mode === 'hub') {
       Sfx.play('click');
       UI.stationPopup(i);
@@ -321,17 +400,17 @@ var Scene = (function () {
 
   // ---------------- customers ----------------
   function makeCust(c) {
-    var n = sh.seats.length;
+    var n = sh.seats.length, p0 = seatPos(c.seat, n);
     var e = el('div', 'cust', E.seats, '<div class="body"></div>');
-    e.style.left = px(seatX(c.seat, n));
-    e.style.top = px(L.custBottom - 224);
-    if (n >= 5) e.style.transform = 'scale(.82)'; else if (n === 4) e.style.transform = 'scale(.93)';
+    e.style.left = px(p0.x);
+    e.style.top = px(p0.top);
+    if (p0.sc !== 1) e.style.transform = 'scale(' + p0.sc + ')';
     e.style.opacity = 0;
     var known = GD.introduced(App.save, c.animal);
     if (c.vip) el('div', 'vip', e, '<img src="' + Art.crown() + '">' + (known ? 'MME BENALI' : 'CRITIQUE'));
     else if (known) el('div', 'tagn', e, GD.PEOPLE[c.animal].name);
     var u = { el: e, c: c, body: e.querySelector('.body'), mood: '', bub: null, its: [], happyT: 0, y: 70, vein: null, op: 0,
-      left: seatX(c.seat, n), top: L.custBottom - 224, sc: n >= 5 ? 0.82 : n === 4 ? 0.93 : 1 };
+      left: p0.x, top: p0.top, sc: p0.sc };
     e.addEventListener('pointerdown', function (ev) { ev.preventDefault(); onCustomer(c.id); });
     CU[c.id] = u;
     setCustMood(u, 'neutral');
@@ -428,7 +507,7 @@ var Scene = (function () {
       if (o.el.style.display === 'none') return;
       var walking = false;
       if (o.path.length) {
-        var p = o.path[0], dx = p.x - o.x, sp = (k === 'chef' ? 1100 : 700) * dt;
+        var p = o.path[0], dx = p.x - o.x, sp = (k === 'chef' ? 1100 : 700) * (isWide() ? 2.2 : 1) * dt;
         if (Math.abs(dx) <= sp) {
           o.x = p.x; o.path.shift();
           if (p.then) p.then();
@@ -444,7 +523,7 @@ var Scene = (function () {
 
   // ---------------- HUD ----------------
   function updateGoal(force) {
-    var g = E.goal, t = sh.thresholds, W = sh.relax ? 672 : 482;
+    var g = E.goal, t = sh.thresholds, W = (L.goalW || 672) - (sh.relax ? 0 : 190);
     var f = Math.min(1, sh.earned / t[2]);
     g.querySelector('.fill').style.width = px(8 + (W - 16) * f);
     var next = sh.earned < t[0] ? t[0] : sh.earned < t[1] ? t[1] : t[2];
@@ -453,7 +532,7 @@ var Scene = (function () {
     for (var i = 0; i < 3; i++) {
       mks[i].style.left = px(8 + (W - 16) * (t[i] / t[2]) - (i === 2 ? 14 : 0));
       var on = sh.earned >= t[i];
-      if (on && !mks[i].classList.contains('on')) { mks[i].classList.add('on'); if (!force) { Sfx.play('star'); sparkAt(28 + 8 + (W - 16) * (t[i] / t[2]), 128, 6); } }
+      if (on && !mks[i].classList.contains('on')) { mks[i].classList.add('on'); if (!force) { Sfx.play('star'); sparkAt(L.goalX + 12 + (W - 16) * (t[i] / t[2]), L.goalY + 36, 6); } }
       if (!on) mks[i].classList.remove('on');
     }
   }
@@ -492,7 +571,7 @@ var Scene = (function () {
   function ftext(x, y, txt, cls) {
     var e = el('div', 'ftxt ' + (cls || 'gold'), E.fx, txt);
     var w = e.offsetWidth || 0;
-    e.style.left = px(Util.clamp(x, w / 2 + 10, 710 - w / 2)); e.style.top = px(y);
+    e.style.left = px(Util.clamp(x, w / 2 + 10, App.W - 10 - w / 2)); e.style.top = px(y);
     setTimeout(function () { e.remove(); }, 1550);
   }
   function sparkAt(x, y, n) {
@@ -505,7 +584,7 @@ var Scene = (function () {
   }
   var flyers = [];
   function flyCoins(x, y, n) {
-    var tx = parseFloat(E.coins.style.left) + 20, ty = 46;
+    var tx = L.coinX, ty = L.coinY;
     for (var i = 0; i < n; i++) {
       var e = el('div', 'fcoin', E.fx);
       flyers.push({ e: e, x0: x + (Math.random() - 0.5) * 50, y0: y + (Math.random() - 0.5) * 30, x1: tx, y1: ty, t: -i * 0.06, d: 0.55 });
@@ -553,7 +632,7 @@ var Scene = (function () {
   function custPos(c) {
     var u = CU[c.id];
     if (u) return { x: u.left, y: u.top + 224 - 140 * u.sc };
-    var n = sh.seats.length; return { x: seatX(c.seat, n), y: L.custBottom - 140 };
+    var p = seatPos(c.seat, sh.seats.length); return { x: p.x, y: p.top + 224 - 140 * p.sc };
   }
   function handleEvents() {
     var evs = sh.events; sh.events = [];
@@ -613,7 +692,7 @@ var Scene = (function () {
         case 'booster':
           Sfx.play('booster');
           if (e.id === 'coeur') { updateHearts(); Object.keys(CU).forEach(function (id) { CU[id].happyT = 0.8; }); }
-          if (e.id === 'temps') ftext(620, 120, '+15 s', 'wtxt');
+          if (e.id === 'temps') ftext(L.timerX, isWide() ? 130 : 120, '+15 s', 'wtxt');
           refreshBoosters();
           break;
         case 'closing': UI.toast('Dernières commandes : on termine les plats en cours !'); break;
@@ -644,14 +723,18 @@ var Scene = (function () {
     }
     if (window.View3D) View3D.frame(dt);
   }
-  function v3dState() { return { CU: CU, CH: CH, L: L, sh: sh, mode: mode, seatX: seatX }; }
+  function v3dState() { return { CU: CU, CH: CH, ST: ST, L: L, sh: sh, mode: mode, seatX: seatX }; }
 
   function stationRect(i) { var c = stationCenter(i); return { x: c.x, y: c.top, w: COLW, h: ROWH }; }
   function custRect(c) { var p = custPos(c); return { x: p.x, y: L.custBottom - 224 - 118 }; }
+  // keyboard (PC): same thing as a click on the station / the booster
+  function pressStation(i) { if (ST[i]) onStation(i); }
+  function pressBooster(k) { var id = GD.BOOSTER_ORDER[k]; if (id && E.bst[id].style.display !== 'none') Game.useBooster(id); }
 
   return {
     build: build, layout: layout, setMode: setMode, update: update, refreshStations: refreshStations, refreshHud: refreshHud,
     refreshDecor: refreshDecor, refreshBoosters: refreshBoosters, stationRect: stationRect, custRect: custRect, L: L, E: E,
-    sparkAt: sparkAt, ftext: ftext, mode: function () { return mode; }, v3dState: v3dState
+    sparkAt: sparkAt, ftext: ftext, mode: function () { return mode; }, v3dState: v3dState, isWide: isWide,
+    pressStation: pressStation, pressBooster: pressBooster
   };
 })();

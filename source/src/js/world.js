@@ -13,19 +13,23 @@ var World = (function () {
     root = el('div', 'world', document.getElementById('stage'));
     root.style.height = px(H);
     el('div', 'w-bg', root);
-    var mapH = Math.min(1080, H - 120), mapW = mapH / 1.5, scale = Math.min(1, 700 / mapW);
+    var W = App.W, wide = App.wide;
+    var mapH = Math.min(1080, H - (wide ? 150 : 120)), mapW = mapH / 1.5, scale = Math.min(1, 700 / mapW);
     mapW *= scale; mapH *= scale;
+    var mapL = (W - mapW) / 2 - (wide ? 250 : 0);
     var map = el('div', 'w-map', root);
-    map.style.cssText += ';left:' + px((720 - mapW) / 2) + ';top:' + px(H - mapH - 22) + ';width:' + px(mapW) + ';height:' + px(mapH);
+    map.style.cssText += ';left:' + px(mapL) + ';top:' + px(H - mapH - 22) + ';width:' + px(mapW) + ';height:' + px(mapH);
+    if (wide) side(mapL + mapW + 46, H - mapH - 22, mapH);
     var title = el('div', 'w-title', root, '<div class="leaf" style="position:relative;margin:0 auto"><span>L’ÎLE</span></div>');
     title.style.top = px(Math.max(-30, H - mapH - 22 - 150));
+    if (wide) { title.style.left = px(mapL + mapW / 2 - W / 2); }
     var cl = el('div', 'close tap w-close', root);
     cl.addEventListener('click', function (e) { e.stopPropagation(); Sfx.play('click'); close(); });
     GD.LOCATIONS.forEach(function (L) {
       var un = GD.locUnlocked(s, L.id), cur = (s.loc || 'jungle') === L.id;
       var p = PINS[L.id];
       var pin = el('div', 'w-pin tap' + (cur ? ' cur' : '') + (un ? '' : ' lock'), root);
-      pin.style.left = px((720 - mapW) / 2 + p[0] * mapW);
+      pin.style.left = px(mapL + p[0] * mapW);
       pin.style.top = px(H - mapH - 22 + p[1] * mapH - 50);
       var pp = el('div', 'pp', pin); pp.style.backgroundImage = 'var(--a-' + L.bg + ')';
       el('div', 'pn', pin, un ? L.resto : L.name);
@@ -33,15 +37,34 @@ var World = (function () {
         cur ? 'Tu es ici' : L.special.length ? 'Spécialités : ' + L.special.map(function (d) { return '<img src="' + Art.dish(d) + '">'; }).join('') : 'La maison';
       el('div', 'pd', pin, desc);
       if (un && !cur && !(s.flags.visited || {})[L.id] && L.id !== 'jungle') el('div', 'badge', pin, '!');
-      pin.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (!un) { Sfx.play('nope'); UI.toast('Ce restaurant ouvrira avec l’histoire (jour ' + L.unlockDay + ')'); return; }
-        if (cur) { Sfx.play('click'); close(); return; }
-        travel(L.id);
-      });
+      pin.addEventListener('click', function (e) { e.stopPropagation(); go(L); });
     });
     Sfx.play('page');
   }
+  function go(L) {
+    var s = App.save, un = GD.locUnlocked(s, L.id), cur = (s.loc || 'jungle') === L.id;
+    if (!un) { Sfx.play('nope'); UI.toast('Ce restaurant ouvrira avec l’histoire (jour ' + L.unlockDay + ')'); return; }
+    if (cur) { Sfx.play('click'); close(); return; }
+    travel(L.id);
+  }
+  // wide screens: the four restaurants as picture cards next to the map
+  function side(x, y, h) {
+    var s = App.save, box = el('div', 'w-side', root);
+    box.style.cssText += ';left:' + px(x) + ';top:' + px(y) + ';height:' + px(h);
+    GD.LOCATIONS.forEach(function (L) {
+      var un = GD.locUnlocked(s, L.id), cur = (s.loc || 'jungle') === L.id;
+      var c = el('div', 'w-card tap' + (cur ? ' cur' : '') + (un ? '' : ' lock'), box);
+      el('div', 'wp', c).style.backgroundImage = 'var(--a-bgw_' + L.id + ')';
+      el('div', 'wn', c, un ? L.resto : L.name);
+      var d = !un ? '<img src="' + ASSETS.lock + '"> Ouvre au jour ' + L.unlockDay :
+        L.special.length ? 'Spécialités ' + L.special.map(function (k) { return '<img src="' + Art.dish(k) + '">'; }).join('') + ' <b>+30 %</b>' : 'La maison, là où tout a commencé';
+      el('div', 'wd', c, d);
+      el('div', 'wg', c, cur ? 'TU ES ICI' : un ? 'Y ALLER' : '');
+      c.addEventListener('click', function (e) { e.stopPropagation(); go(L); });
+    });
+  }
+  // the window changed shape while the map was open: draw it again
+  function layout() { if (root) { root.remove(); root = null; open(); } }
   function close(cb) {
     if (!root) { if (cb) cb(); return; }
     var r = root; root = null;
@@ -68,5 +91,5 @@ var World = (function () {
     });
   }
   function isOpen() { return !!root; }
-  return { open: open, close: close, travel: travel, isOpen: isOpen };
+  return { open: open, close: close, travel: travel, isOpen: isOpen, layout: layout };
 })();
