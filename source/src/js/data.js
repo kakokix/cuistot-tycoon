@@ -58,7 +58,15 @@ var GD = (function () {
     close: 60,                // seconds given to finish the last orders (Détente); who paid and is not served is paid back
     // the register: share of customers who pay in cash (the change has to be given), what a mistake costs
     cash: 0.35, posPenalty: 0.08, changeGood: 1.15, changeBad: 0.8,
-    rush: { at: 0.45, dur: 26, mul: 0.55, day: 3 }   // "coup de feu": from day 3, customers come faster for a while in the middle of the day
+    rush: { at: 0.45, dur: 26, mul: 0.55, day: 3 },  // "coup de feu": from day 3, customers come faster for a while in the middle of the day
+    // the drive: from this day, cars stop at the window at the left end of the kitchen, one at a time.
+    // first: seconds before the first car; gap: seconds between a car leaving and the next one coming;
+    // inT / outT: seconds a car takes to drive up / to drive away; patience: a car waits longer than
+    // somebody standing at the counter; p3: share of cars that order 3 dishes (the others order 2);
+    // giveUp: in relaxed mode, a car whose order nobody takes drives away after this many seconds (no penalty);
+    // honk: it honks when this share of its patience is left; tip: a car tips this many times more.
+    // The cars do not count in the goal of the day: they are a bonus for who finds the time.
+    drive: { day: 4, first: 16, gap: [15, 28], inT: 3.6, outT: 3.2, patience: 1.3, p3: 0.35, giveUp: 45, honk: 0.35, tip: 2 }
   };
 
   // realistic customers (sprites cu_<id>_<mood>); the food critic is the VIP (pays x2)
@@ -120,7 +128,8 @@ var GD = (function () {
     // version 2.1: the simulator played with the hands
     { id: 'hand50',    name: 'Fait main',            desc: 'Cuisiner 50 plats à la main (Simulateur)', stat: 'hand', goal: 50, reward: 500 },
     { id: 'order100',  name: 'Bonjour, vous désirez ?', desc: 'Prendre 100 commandes au comptoir', stat: 'orders', goal: 100, reward: 800 },
-    { id: 'wipe30',    name: 'Comptoir impeccable',  desc: 'Essuyer 30 fois le comptoir',   stat: 'wipes', goal: 30,  reward: 400 }
+    { id: 'wipe30',    name: 'Comptoir impeccable',  desc: 'Essuyer 30 fois le comptoir',   stat: 'wipes', goal: 30,  reward: 400 },
+    { id: 'drive30',   name: 'Roi du drive',         desc: 'Servir 30 voitures au drive (Simulateur)', stat: 'cars', goal: 30, reward: 700 }
   ];
   function achValue(save, stat) {
     var st = save.stats || {};

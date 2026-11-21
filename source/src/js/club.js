@@ -686,14 +686,14 @@ var Club = (function () {
     var ach = Object.keys(s.ach || {}).length, places = GD.achValue(s, 'places');
     var rows = [
       ['Chef', 'niveau ' + s.level + ((s.prestige || 0) > 0 ? ' • ' + s.prestige + ' toque' + (s.prestige > 1 ? 's' : '') + ' d’or' : '')],
-      ['Clients servis', Util.fmt(st.served || 0)],
+      ['Clients servis', Util.fmt(st.served || 0) + (st.rateN ? ' • avis ★ ' + (st.rateSum / st.rateN).toFixed(1).replace('.', ',') : '')],
       ['Pièces gagnées', Util.fmt(st.earned || 0) + ' ' + COIN()],
       ['Journées terminées', Util.fmt(st.days || 0)],
       ['Meilleure journée', Util.fmt(st.bestDay || 0) + ' ' + COIN()],
       ['Étoiles', Util.fmt(Online.stars())],
       ['Clients partis fâchés', Util.fmt(st.lost || 0)],
       ['Critique servie', Util.fmt(st.vip || 0) + ' fois'],
-      ['Journées en Simulateur', Util.fmt(st.sim || 0)],
+      ['Journées en Simulateur', Util.fmt(st.sim || 0) + (st.cars ? ' • ' + Util.fmt(st.cars) + ' voiture' + (st.cars > 1 ? 's' : '') + ' au drive' : '')],
       ['Défis du jour joués', Util.fmt(st.defis || 0)],
       ['Amis parmi les habitués', friends],
       ['Succès', ach + ' / ' + GD.ACHIEVEMENTS.length],

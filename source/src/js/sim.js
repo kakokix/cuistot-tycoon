@@ -26,6 +26,7 @@ var Shift = (function () {
     this.dishes = [0, 0, 0, 0, 0, 0, 0, 0]; this.boostUsed = 0;      // counted for the missions of the day
     this.orders = 0; this.burnt = 0; this.wiped = 0; this.restocks = 0; this.posErr = 0;
     this.refunds = 0; this.refunded = 0;        // simulator: orders paid at the register and never served
+    this.notes = [];                            // what each customer thought of the service, 1 to 5 (see rate)
     // simulator: the rush of the middle of the day (customers come faster for a moment)
     this.rush = 0; this.rushDone = false;
     this.rushAt = simPace && day >= SIM.rush.day ? this.duration * SIM.rush.at : -1;
@@ -42,6 +43,10 @@ var Shift = (function () {
         hd: GDx.HANDS[def.id], stock: SIM.stock, stockMax: SIM.stock, held: 0 };
     });
     this.menu = this.stations.filter(function (s) { return s.owned; }).map(function (s) { return s.i; });
+    // simulator: the drive. One car at a time stops at the window. Its driver is a customer like the
+    // others (same states, same register, same refund) whose place number is seats.length.
+    this.driveOn = simPace && day >= SIM.drive.day && !this.tutorial && !this.challenge;
+    this.car = null; this.carT = SIM.drive.first; this.cars = 0;
     if (simPace) {
       // simulator: the goal is worked out from this kitchen. "potential" = what the day would bring if
       // every customer who can come was served quickly; the goal is a share of it.
@@ -108,6 +113,30 @@ var Shift = (function () {
     return true;
   };
 
+  // simulator: a car drives up to the window of the drive
+  P.spawnCar = function () {
+    if (!this.menu.length) return false;
+    var rng = this.rng, D = GDx.SIM.drive, k = rng() < D.p3 ? 3 : 2, items = [];
+    for (var j = 0; j < k; j++) {
+      var si = this.menu[Math.floor(rng() * this.menu.length)];
+      items.push({ st: si, dish: this.stations[si].def.dish, done: false });
+    }
+    var present = {};
+    for (var q = 0; q < this.customers.length; q++) present[this.customers[q].animal] = 1;
+    var pool = GDx.CUSTOMERS.filter(function (x) { return !present[x]; });
+    if (!pool.length) pool = GDx.CUSTOMERS;
+    var maxP = (11 + 6 * k) * this.cfg.patience * (1 + 0.12 * (this.save.decor.plantes || 0)) * GDx.SIM.patience * D.patience;
+    var c = {
+      id: this.nextId++, animal: pool[Math.floor(rng() * pool.length)],
+      seat: this.seats.length, drive: true, paint: Math.floor(rng() * 6),
+      items: items, state: 'in', stateT: 0, patience: maxP, maxPatience: maxP,
+      vip: false, happy: false, pay: 0, dirty: false
+    };
+    this.car = c; this.customers.push(c);
+    this.emit('arrive', { c: c });
+    return true;
+  };
+
   P.update = function (dt) {
     if (this.over) return;
     var tutoHold = this.tutorial && !this.tutoServed;
@@ -131,6 +160,7 @@ var Shift = (function () {
         this.spawnTimer = iv * (0.7 + 0.6 * this.rng());
       } else this.spawnTimer = 0.3;
     }
+    if (this.driveOn && !this.car && this.timeLeft > 8) { this.carT -= dt; if (this.carT <= 0) this.spawnCar(); }
     // cooking
     var speed = this.boost.turbo > 0 ? 2 : 1;
     for (i = 0; i < this.stations.length; i++) {
@@ -147,7 +177,7 @@ var Shift = (function () {
       c = this.customers[i];
       c.stateT += dt;
       if (c.state === 'in') {
-        if (c.stateT >= WALK_IN) {
+        if (c.stateT >= (c.drive ? SIM.drive.inT : WALK_IN)) {
           c.stateT = 0;
           if (this.manual) {              // simulator: somebody has to come and take the order
             c.state = 'ask'; this.emit('ask', { c: c });
@@ -155,18 +185,33 @@ var Shift = (function () {
           } else { c.state = 'wait'; this.emit('order', { c: c }); }
         }
       } else if (c.state === 'wait' || c.state === 'ask') {
+        // Who leaves without a fuss: a car nobody comes to see (nobody is forced to take its order), and,
+        // once the door is closed, the cars and (Classique) the people who have not ordered yet.
+        if (c.state === 'ask' && !c.busy && ((c.drive && (c.stateT >= SIM.drive.giveUp || this.closing)) || (this.closing && this.manual && !this.relax))) {
+          c.state = 'out'; c.stateT = 0; c.happy = false; c.calm = true;      // (no review: he was not served at all)
+          this.emit('giveup', { c: c, closed: this.closing });
+          continue;
+        }
         if (!tutoHold) c.patience -= dt * (c.state === 'ask' ? SIM.askDrain : 1);
+        // a car honks when it has waited long: half-way before giving up, and when its patience runs low
+        if (c.drive && !c.honked && (c.state === 'ask' ? c.stateT >= SIM.drive.giveUp / 2 && !c.busy : c.patience < c.maxPatience * SIM.drive.honk)) { c.honked = true; this.emit('honk', { c: c }); }
         if (c.patience <= 0 && this.relax) c.patience = 0;
         else if (c.patience <= 0) {
           c.patience = 0; c.state = 'out'; c.stateT = 0; c.happy = false;
-          this.lost++; this.hearts--; this.save.stats.lost++;
-          this.emit('angry', { c: c });
+          // (a heart is lost at the counter while the restaurant is open: not for a car of the drive,
+          // which is a bonus, and not after the door closed, when the last orders are being finished)
+          var heart = !c.drive && !this.closing;
+          this.lost++; this.save.stats.lost++;
+          if (heart) this.hearts--;
+          this.rate(c, 1);
+          this.emit('angry', { c: c, heart: heart });
           this.refund(c);
           if (this.hearts <= 0) { this.end('hearts'); return; }
         }
       } else if (c.state === 'out') {
-        if (c.stateT >= WALK_OUT) {
+        if (c.stateT >= (c.drive ? SIM.drive.outT : WALK_OUT)) {
           if (this.seats[c.seat] === c) this.seats[c.seat] = null;
+          if (this.car === c) { this.car = null; this.carT = SIM.drive.gap[0] + (SIM.drive.gap[1] - SIM.drive.gap[0]) * this.rng(); }
           this.customers.splice(i, 1);
           this.emit('gone', { c: c });
         }
@@ -177,8 +222,9 @@ var Shift = (function () {
     if (this.relax && !this.manual) this.autoServe();
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
-      if (this.relax && !this.tutorial) {
+      if ((this.relax || this.manual) && !this.tutorial) {
         // "dernières commandes": the door closes, the chef finishes the orders already taken
+        // (simulator: in both modes, so that those who paid can still be served)
         if (!this.closing) { this.closing = true; this.emit('closing', {}); }
         this.closingT += dt;
         var waiting = 0;
@@ -233,7 +279,7 @@ var Shift = (function () {
         for (i = 0; i < this.stations.length && !did; i++) if (this.stations[i].ready > 0 && this.serveFrom(i, null, 'serveur')) did = true;
         // he takes the orders nobody took and, from level 2, wipes the free places
         var wait = SIM.waiterAsk[lv.serveur - 1];
-        for (i = 0; i < this.customers.length && !did; i++) { c = this.customers[i]; if (c.state === 'ask' && !c.busy && c.stateT >= wait) did = this.takeOrder(c, 'serveur'); }
+        for (i = 0; i < this.customers.length && !did; i++) { c = this.customers[i]; if (c.state === 'ask' && !c.busy && !c.drive && c.stateT >= wait) did = this.takeOrder(c, 'serveur'); }
         if (lv.serveur >= 2) for (i = 0; i < this.seats.length && !did; i++) if (this.dirt[i] && !this.seats[i]) did = this.wipe(i, 'serveur');
         this.staffT.serveur = did ? S.serveur.interval[lv.serveur - 1] * SIM.staffPace : 0.25;
       }
@@ -398,6 +444,20 @@ var Shift = (function () {
     this.emit('prepay', { c: c, amount: c.paid0, by: by || 'player' });
     return true;
   };
+  // What a customer thinks of the service, from 1 to 5 stars: the results of the day show the average
+  // ("avis des clients"). Served quickly = 5; a wrong order typed, the wrong change, a dirty counter
+  // or a long wait cost stars; leaving angry or unserved = 1.
+  P.rate = function (c, n) {
+    n = Math.max(1, Math.min(5, n));
+    c.note = n; this.notes.push(n);
+    var st = this.save.stats;
+    st.rateN = (st.rateN || 0) + 1; st.rateSum = (st.rateSum || 0) + n;
+  };
+  P.rating = function () {
+    if (!this.notes.length) return 0;
+    for (var i = 0, s = 0; i < this.notes.length; i++) s += this.notes[i];
+    return s / this.notes.length;
+  };
   // simulator: a customer who paid at the register and leaves without his order gets his money back
   // (he leaves angry, or the day ends). So the money only counts once the order is served.
   P.refund = function (c) {
@@ -440,6 +500,9 @@ var Shift = (function () {
       st.cooking = keep; st.held = 0;
     });
     this.manual = false;
+    // no drive in the manager view: the car drives away (paid back if it had paid)
+    if (this.car) { var car = this.car, ci = this.customers.indexOf(car); this.refund(car); if (ci >= 0) this.customers.splice(ci, 1); this.car = null; this.emit('gone', { c: car }); }
+    this.driveOn = false;
     for (var i = 0; i < this.customers.length; i++) { var c = this.customers[i]; if (c.state === 'ask') { c.state = 'wait'; c.stateT = 0; this.emit('order', { c: c }); } }
     for (i = 0; i < this.dirt.length; i++) this.dirt[i] = false;
     this.rushAt = -1; this.rush = 0;
@@ -453,6 +516,7 @@ var Shift = (function () {
       var c = this.customers[i];
       if (c.state !== 'wait') continue;
       if (onlyCust && c !== onlyCust) continue;
+      if (c.drive && by === 'serveur') continue;        // the waiter stays at the counter: the drive is the player's
       for (var j = 0; j < c.items.length; j++) {
         var it = c.items[j];
         if (!it.done && it.st === si) {
@@ -477,10 +541,11 @@ var Shift = (function () {
     var base = 0;
     for (var i = 0; i < c.items.length; i++) base += this.stations[c.items[i].st].price;
     var pf = Math.max(0, Math.min(1, c.patience / c.maxPatience));
-    var tipMul = (1 + 0.2 * (this.save.decor.lanternes || 0)) * (this.boost.chance > 0 ? 3 : 1) *
+    var tipMul = (c.drive ? GDx.SIM.drive.tip : 1) * (1 + 0.2 * (this.save.decor.lanternes || 0)) * (this.boost.chance > 0 ? 3 : 1) *
       (this.relax ? 1 + 0.1 * (this.save.staff.serveur || 0) : 1);   // Détente: the waiter brings bigger tips
     // simulator: the right order at the first try, the right change, a clean counter, served in good time
     var perfect = this.manual && !c.posErrs && (c.tipK || 1) >= 1 && pf >= 0.5 && !c.dirty;
+    this.rate(c, (pf >= 0.4 ? 5 : pf >= 0.2 ? 4 : pf >= 0.05 ? 3 : 2) - Math.min(2, c.posErrs || 0) - ((c.tipK || 1) < 1 ? 1 : 0) - (c.dirty ? 1 : 0));
     var tip = base * 0.3 * pf * tipMul * (c.dirty ? 0.5 : 1) * (c.tipK || 1) * (perfect ? 1.1 : 1);   // a dirty counter: half the tip
     var mul = c.vip ? 2 : 1;
     var total = Math.round((base + tip) * mul);
@@ -506,7 +571,8 @@ var Shift = (function () {
     var lv = GDx.friendLevel(after);
     if (lv > GDx.friendLevel(before)) this.emit('friend', { c: c, who: c.animal, level: lv });
     // simulator: some customers leave crumbs behind them
-    if (this.manual && !this.dirt[c.seat] && this.rng() < GDx.SIM.dirt) { this.dirt[c.seat] = true; this.dirtT[c.seat] = 0; this.emit('crumbs', { seat: c.seat }); }
+    if (c.drive) { this.cars++; this.save.stats.cars = (this.save.stats.cars || 0) + 1; }
+    if (this.manual && !c.drive && !this.dirt[c.seat] && this.rng() < GDx.SIM.dirt) { this.dirt[c.seat] = true; this.dirtT[c.seat] = 0; this.emit('crumbs', { seat: c.seat }); }
   };
 
   // ---- player actions ----
@@ -601,7 +667,10 @@ var Shift = (function () {
   P.end = function (reason) {
     if (this.over) return;
     this.over = true; this.endReason = reason;
-    for (var k = 0; k < this.customers.length; k++) this.refund(this.customers[k]);   // paid and not served
+    for (var k = 0; k < this.customers.length; k++) {                                   // paid and not served
+      if (this.customers[k].paid0 && this.customers[k].state !== 'out') this.rate(this.customers[k], 1);
+      this.refund(this.customers[k]);
+    }
     var s = 0;
     for (var i = 0; i < 3; i++) if (this.earned >= this.thresholds[i]) s = i + 1;
     if (reason === 'hearts' && !this.relax) s = 0;

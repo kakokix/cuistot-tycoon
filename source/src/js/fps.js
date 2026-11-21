@@ -14,6 +14,8 @@ var Fps = (function () {
   var carry = [], crate = false, MAXC = 3, target = null, locked = false, wantLock = false, tHud = 0, bound = false, free = false;
   var EYE = 2.15, ZMIN = 0.98, ZMAX = 3.32, REACH = 2.5;
   var FRIDGE = { x: 6.9, y: 1.35, z: 3.05 };      // the middle of the fridge door (see View3D.buildRoom)
+  var DRIVE = { x: -7.62, y: 1.8, z: 2.15 };      // the window of the drive, in the left wall (see View3D.buildRoom)
+  var XDRIVE = 6.5;                               // how far to the left the cook can walk (up to the window)
   var touchMode = false, stepN = 0, ambT = 0, actAt = -1e9;
   var reg = null;                                 // the register, while an order is being typed (see openPos)
   var selfExit = false;                           // the game itself has just released the mouse (see onLockChange)
@@ -97,6 +99,8 @@ var Fps = (function () {
     });
     // labels standing in the kitchen: the fridge, the places to wipe (see place())
     E.fridge = el('div', 'fps-tag fridge', hud, '<b>FRIGO</b><span>ingrédients</span>');
+    E.drive = el('div', 'fps-tag drive', hud, '<b>UNE VOITURE</b><span>attend sa commande</span>');
+    E.call = el('div', 'fps-call', hud, '<i></i><b>DRIVE</b><span>une voiture attend</span>');
     E.dirt = [];
     if (touchMode) {
       E.joy = el('div', 'fps-joy', hud, '<i></i>');
@@ -251,7 +255,7 @@ var Fps = (function () {
     var tx = (fx * c - fz * s) * sp, tz = (-fx * s - fz * c) * sp, k = Math.min(1, dt * 12);
     P.vx += (tx - P.vx) * k; P.vz += (tz - P.vz) * k;
     var hl = halfLen();
-    P.x = Util.clamp(P.x + P.vx * dt, -hl, hl);
+    P.x = Util.clamp(P.x + P.vx * dt, -Math.max(hl, XDRIVE), hl);
     P.z = Util.clamp(P.z + P.vz * dt, ZMIN, ZMAX);
     var v = Math.sqrt(P.vx * P.vx + P.vz * P.vz);
     P.walk += v * dt * 2.3;
@@ -288,6 +292,7 @@ var Fps = (function () {
     var m = View3D.metrics();
     if (type === 'station') return { x: m.geo[i].x, y: m.wtTop + 0.3, z: m.zSt - 0.15 };
     if (type === 'fridge') return FRIDGE;
+    if (type === 'cust' && sh && i >= sh.seats.length) return DRIVE;      // the car of the drive has the place after the last one
     var sx = View3D.seatX(i, sh ? sh.seats.length : 3);
     if (type === 'dirt') return { x: sx, y: 1.28, z: 0.12 };
     return { x: sx, y: 1.9, z: -1.15 };                 // a customer
@@ -313,6 +318,7 @@ var Fps = (function () {
         if (sh.dirt[i]) test('dirt', i, 2.7, 0.93);
       }
       test('fridge', 0, 2.9, 0.8);
+      if (sh.car && sh.car.state !== 'out') test('cust', n, 3.4, 0.86, sh.car);
     }
     for (i = 0; i < 8; i++) { var isT = !!best && best.type === 'station' && best.i === i; st[i].hover = isT; st[i].el.classList.toggle('tg', isT); }
     target = best;
@@ -364,7 +370,8 @@ var Fps = (function () {
     }
     if (t.type === 'dirt') return crate ? { txt: 'Pose d’abord la caisse', can: false } : { txt: 'Essuyer le comptoir', can: true, act: 'wipe' };
     var c = t.obj, who = (GD.PEOPLE[c.animal] && GD.introduced(App.save, c.animal)) ? GD.PEOPLE[c.animal].name : 'ce client';
-    if (c.state === 'ask') return { txt: 'Prendre la commande', can: true, act: 'order' };
+    if (c.drive) who = 'la voiture';
+    if (c.state === 'ask') return { txt: c.drive ? 'Drive : prendre la commande' : 'Prendre la commande', can: true, act: 'order' };
     if (c.state !== 'wait') return { txt: '', can: false };
     for (var k = 0; k < carry.length; k++) if (sh.wants(c, carry[k].st)) return { txt: 'Servir ' + who, can: true, act: 'give' };
     var miss = c.items.filter(function (it) { return !it.done; }).map(function (it) { return dishName(it.st); });
@@ -387,7 +394,12 @@ var Fps = (function () {
     for (i = 0; i < 8; i++) { u = sh.unitIn(i, 'burnt'); if (u && u.by !== 'commis') return { type: 'station', i: i, act: 'trash' }; }
     for (i = 0; i < 8; i++) { u = sh.unitIn(i, 'mid'); if (u && u.by !== 'commis') return { type: 'station', i: i, act: 'mid' }; }
     // (once the door is closed, those who already paid come first: a new order waits)
-    if (!sh.closing) for (i = 0; i < cs.length; i++) if (cs[i].state === 'ask') return { type: 'cust', i: cs[i].seat, act: 'order' };
+    // (a car is a big order and nobody is forced to take it: with three orders already running, two in
+    // Classique, it is left alone and drives away by itself)
+    var busyN = 0;
+    for (i = 0; i < cs.length; i++) if (cs[i].state === 'wait') busyN++;
+    function asks(c) { return c.state === 'ask' && !(c.drive && busyN >= (sh.relax ? 3 : 2)); }
+    if (!sh.closing) for (i = 0; i < cs.length; i++) if (asks(cs[i])) return { type: 'cust', i: cs[i].seat, act: 'order' };
     if (carry.length < MAXC) for (i = 0; i < 8; i++) { st = sh.stations[i]; if (st.ready > 0 && sh.wanted(i) > heldOf(i)) return { type: 'station', i: i, act: 'take' }; }
     for (i = 0; i < 8; i++) {
       st = sh.stations[i]; u = sh.nextFin(i);
@@ -402,17 +414,18 @@ var Fps = (function () {
       if (sh.stations[best].stock > 0) return { type: 'station', i: best, act: 'cook' };
       if (!carry.length) return { type: 'fridge', i: 0, act: 'crate' };
     }
-    if (sh.closing) for (i = 0; i < cs.length; i++) if (cs[i].state === 'ask') return { type: 'cust', i: cs[i].seat, act: 'order' };
+    if (sh.closing) for (i = 0; i < cs.length; i++) if (asks(cs[i])) return { type: 'cust', i: cs[i].seat, act: 'order' };
     if (!carry.length) for (i = 0; i < sh.seats.length; i++) if (sh.dirt[i]) return { type: 'dirt', i: i, act: 'wipe' };
     return null;
   }
   function low(t) { return t.charAt(0).toLowerCase() + t.slice(1); }
   function coachText(g) {
     var nm = g.type === 'station' ? GD.STATIONS[g.i].name : '', hd = g.type === 'station' ? sh.stations[g.i].hd : null;
+    var drv = g.type === 'cust' && g.i >= sh.seats.length;
     switch (g.act) {
-      case 'order': return 'Un client attend au comptoir : prends sa commande';
+      case 'order': return drv ? 'Une voiture attend au drive, à gauche : prends sa commande' : 'Un client attend au comptoir : prends sa commande';
       case 'reg': return 'Caisse : tape ce que demande le client, puis ENCAISSER';
-      case 'give': return 'Apporte le plat au client, au comptoir';
+      case 'give': return drv ? 'Apporte la commande à la voiture, au drive' : 'Apporte le plat au client, au comptoir';
       case 'trash': return nm + ' : c’est brûlé, jette-le';
       case 'mid': return nm + ' : ' + low(hd.mid);
       case 'take': return nm + ' : prends ' + low(GD.STATIONS[g.i].dishName);
@@ -444,6 +457,7 @@ var Fps = (function () {
     var parts = ord.map(function (st) { return GD.SAY[GD.STATIONS[st].dish][Math.min(3, cnt[st]) - 1]; });
     var list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' et ' + parts[parts.length - 1] : parts[0];
     var T = again ? ['Non… je répète : {l}.', 'Pas tout à fait ! Je voudrais {l}.']
+      : c.drive ? ['Bonjour ! À emporter : {l}, s’il vous plaît.', 'C’est pour emporter : {l}.', 'Salut chef ! Je prends {l}, à emporter.']
       : ['Bonjour ! Je voudrais {l}, s’il vous plaît.', 'Pour moi, ce sera {l}.', 'Salut chef ! {L}, s’il vous plaît.', 'Je vais prendre {l}.'];
     return T[c.id % T.length].replace('{l}', list).replace('{L}', list.charAt(0).toUpperCase() + list.slice(1));
   }
@@ -522,7 +536,7 @@ var Fps = (function () {
   function drawPos() {
     if (!E.reg || !reg) return;
     var c = reg.c, i, coin = '<img class="coin" src="' + Art.coin() + '">';
-    var h = '<div class="reg-say"><b style="background-image:var(--a-cu_' + c.animal + '_neutral)"></b><span>« ' + reg.say + ' »</span></div>';
+    var h = '<div class="reg-say"><b style="background-image:var(--a-cu_' + c.animal + '_neutral)"></b>' + (c.drive ? '<u class="reg-drive">DRIVE</u>' : '') + '<span>« ' + reg.say + ' »</span></div>';
     if (reg.stage === 'order') {
       h += '<div class="reg-grid">';
       for (i = 0; i < sh.menu.length; i++) {
@@ -617,11 +631,12 @@ var Fps = (function () {
     if (E.coach._v !== cv) { E.coach._v = cv; E.coach.innerHTML = cv; E.coach.className = 'fps-coach' + (cv ? ' on' : ''); }
     // order tickets: "?" while nobody took the order
     var t = '';
-    for (var s = 0; s < sh.seats.length; s++) {
-      var c = sh.seats[s];
+    var tl = sh.car ? sh.seats.concat([sh.car]) : sh.seats;       // the car of the drive has its ticket too
+    for (var s = 0; s < tl.length; s++) {
+      var c = tl[s];
       if (!c || (c.state !== 'wait' && c.state !== 'ask')) continue;
       var r = Math.max(0, c.patience / c.maxPatience);
-      t += '<div class="tk' + (c.state === 'ask' ? ' ask' : '') + (target && target.type === 'cust' && target.obj === c ? ' tg' : '') + '"><b style="background-image:var(--a-cu_' + c.animal + '_neutral)"></b>';
+      t += '<div class="tk' + (c.drive ? ' car' : '') + (c.state === 'ask' ? ' ask' : '') + (target && target.type === 'cust' && target.obj === c ? ' tg' : '') + '"><b style="background-image:var(--a-cu_' + c.animal + '_neutral)"></b>';
       if (c.state === 'ask') t += '<em>?</em>';
       else for (var j = 0; j < c.items.length; j++) t += '<i class="' + (c.items[j].done ? 'done' : '') + '" style="background-image:' + Art.dishBg(c.items[j].dish) + '"></i>';
       t += '<u><s style="width:' + Math.round(r * 100) + '%" class="' + (r < 0.3 ? 'low' : r < 0.6 ? 'mid' : '') + '"></s></u></div>';
@@ -643,6 +658,14 @@ var Fps = (function () {
     if (sh) for (i = 0; i < 8; i++) if (sh.stations[i].owned && sh.stations[i].stock <= 0) empty = true;
     tag(E.fridge, !!sh && !sh.over && p.front && Math.abs(FRIDGE.x - P.x) < 9 && p.x > -120 && p.x < App.W + 120, p,
       'fps-tag fridge' + (empty && !crate ? ' alert' : '') + (target && target.type === 'fridge' ? ' tg' : ''));
+    // the drive: a label above the window, and a call on the edge of the screen while a car waits out of sight
+    var car = sh && !sh.over ? sh.car : null, asks = !!car && car.state === 'ask' && !reg;
+    p = scr(DRIVE.x, 2.86, DRIVE.z);
+    var seen = p.front && p.x > 40 && p.x < App.W - 40;
+    // (the sign above the window already says DRIVE: the label only calls when a car waits for its order)
+    tag(E.drive, asks && p.front && p.x > -120 && p.x < App.W + 120 && !(target && target.type === 'cust' && target.obj === car), p, 'fps-tag drive alert');
+    var cv = asks && !seen ? (arrowTo({ type: 'cust', i: sh.seats.length }) === 'right' ? 'fps-call on r' : 'fps-call on') : 'fps-call';
+    if (E.call._c !== cv) { E.call._c = cv; E.call.className = cv; }
     var n = sh ? sh.seats.length : 0;
     while (E.dirt.length < n) E.dirt.push(el('div', 'fps-tag dirt', hud, 'À essuyer'));
     for (i = 0; i < E.dirt.length; i++) {
@@ -665,7 +688,7 @@ var Fps = (function () {
     active: function () { return on; }, isFree: function () { return on && free; }, carrying: function () { return carry.length; },
     relock: function () { if (on && !touchMode && !locked && !UI.isBlocking() && !reg) lock(); },
     posOpen: function () { return !!reg; }, posClose: function () { closePos(true); },
-    FRIDGE: FRIDGE, place: place, coachOn: coachOn, abort: abort,
+    FRIDGE: FRIDGE, DRIVE: DRIVE, place: place, coachOn: coachOn, abort: abort, _xmin: function () { return -Math.max(halfLen(), XDRIVE); },
     _p: P, _target: function () { return target; }, _describe: describe, _carry: function () { return carry; }, _crate: function () { return crate; },
     _pos: pos, _aim: aim, _plan: plan, _reg: function () { return reg; }, _posSolve: posSolve
   };

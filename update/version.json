@@ -1,24 +1,24 @@
 {
- "version": "2.2.0",
- "label": "2.2",
- "build": 9,
+ "version": "2.3.0",
+ "label": "2.3",
+ "build": 10,
  "notes": [
-  "<b>La caisse</b> : le client dit sa commande, tu la tapes",
-  "Il paie tout de suite, par carte ou en espèces",
-  "En espèces : rends la bonne monnaie, le pourboire monte",
-  "Pas servi ? Il est remboursé. Service parfait : bonus !",
-  "Touches 1 à 8 et Entrée sur PC, gros boutons au doigt",
-  "Corrigé : plantes et tambours parfois invisibles"
+  "<b>Le drive</b> : des voitures s’arrêtent à la fenêtre, à gauche",
+  "Commande à emporter, pourboire doublé : c’est du bonus",
+  "Elles klaxonnent, et repartent si personne ne vient",
+  "<b>Avis des clients</b> : ta note du jour, sur 5 étoiles",
+  "Classique : après la cloche, on finit ce qui est payé",
+  "Dès le jour 4, en vue Simulateur"
  ],
  "web": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/game.html",
-  "sha256": "df6611942abafcc98507362b1a7b63e312edb8500f29b8897a37e2311db16df8",
-  "size": 7336161
+  "sha256": "9c2d5de04c51a18e26ad2ad8efcd799fbd4fdd9fe4c7588a8c1c76c50db6588b",
+  "size": 7357745
  },
  "desktop": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/desktop.html",
-  "sha256": "3c0a5bce7a3f73c523bdb210cc4c7cbd48ab4330211feb96ba62a9d88dbe41ad",
-  "size": 7336202,
+  "sha256": "9e7a335e6d98d42b50f289720955a95cbfb05c0dd5bfe7bb96a8b34e5464c0b1",
+  "size": 7357786,
   "minNative": 1,
   "exe": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/download/CuistotTycoon.exe"
  },

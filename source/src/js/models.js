@@ -976,11 +976,58 @@ var Models = (function () {
       }
     }
   };
+  // An open jeep for the drive. Origin on the ground, nose towards +z, the driver sits on the +x side
+  // (the side of the kitchen window). paint: the material of the body (its colour changes for each car).
+  function jeep(paint) {
+    if (!ready()) return null;
+    var g = new T.Group(), dark = col(0x2a2c30, 0.6, 0.2), seat = col(0x4a3426, 0.85), rub = col(0x17171a, 0.95), i;
+    box(g, 1.9, 0.62, 4.2, paint, 0, 0.74, 0, 0.12);                        // the tub
+    box(g, 1.62, 0.3, 1.4, paint, 0, 1.17, 1.42, 0.1);                      // the hood
+    box(g, 1.9, 0.3, 0.9, paint, 0, 1.2, -1.72, 0.08);                      // the closed back
+    [-1, 1].forEach(function (sd) {
+      box(g, 0.1, 0.3, 1.95, paint, sd * 0.9, 1.2, -0.3, 0.04);             // sides of the cabin
+      box(g, 0.4, 0.12, 1.15, dark, sd * 0.93, 1.06, 1.38, 0.05);           // fenders
+      box(g, 0.4, 0.12, 1.15, dark, sd * 0.93, 1.06, -1.38, 0.05);
+      cyl(g, 0.17, 0.17, 0.08, glow('carlamp', 0xfff3c4, 0.9), sd * 0.62, 1.0, 2.13, 16).rotation.x = Math.PI / 2;
+      box(g, 0.2, 0.12, 0.04, glow('cartail', 0xd9342b, 0.5), sd * 0.72, 0.95, -2.12);
+      cyl(g, 0.045, 0.045, 0.9, dark, sd * 0.84, 1.75, -0.86, 8);           // roll bar
+      box(g, 0.07, 0.86, 0.07, dark, sd * 0.8, 1.72, 0.66).rotation.x = -0.2;      // windshield posts
+    });
+    cyl(g, 0.045, 0.045, 1.72, dark, 0, 2.2, -0.86, 8).rotation.z = Math.PI / 2;
+    box(g, 1.66, 0.07, 0.07, dark, 0, 2.13, 0.575);
+    box(g, 1.54, 0.8, 0.02, glass(), 0, 1.72, 0.66).rotation.x = -0.2;
+    box(g, 1.25, 0.46, 0.05, dark, 0, 0.98, 2.12);                          // grille
+    for (i = -3; i <= 3; i++) box(g, 0.05, 0.4, 0.03, steel(), i * 0.13, 0.98, 2.15);
+    box(g, 2.04, 0.14, 0.16, steel(), 0, 0.5, 2.2, 0.05); box(g, 2.04, 0.14, 0.16, steel(), 0, 0.5, -2.2, 0.05);
+    box(g, 0.46, 0.2, 0.02, col(0xf6f3ea, 0.5), 0, 0.52, 2.29); box(g, 0.46, 0.2, 0.02, col(0xf6f3ea, 0.5), 0, 0.72, -2.13);
+    [-0.45, 0.45].forEach(function (x) {                                    // two seats
+      box(g, 0.62, 0.16, 0.62, seat, x, 1.0, -0.3, 0.06); box(g, 0.62, 0.74, 0.16, seat, x, 1.38, -0.66, 0.06);
+      box(g, 0.3, 0.18, 0.12, seat, x, 1.86, -0.68, 0.05);
+    });
+    box(g, 1.7, 0.2, 0.3, dark, 0, 1.24, 0.6, 0.06);                        // dashboard
+    torus(g, 0.19, 0.03, rub, 0.45, 1.45, 0.36).rotation.x = -0.45;         // steering wheel, on the driver's side
+    cyl(g, 0.025, 0.025, 0.3, dark, 0.45, 1.36, 0.47, 8).rotation.x = 1.1;
+    cyl(g, 0.4, 0.4, 0.24, rub, 0, 1.12, -2.28, 20).rotation.x = Math.PI / 2;      // spare wheel
+    cyl(g, 0.2, 0.2, 0.26, steel(), 0, 1.12, -2.28, 14).rotation.x = Math.PI / 2;
+    bake(g);
+    var wheels = [];
+    [[-0.98, 1.38], [0.98, 1.38], [-0.98, -1.38], [0.98, -1.38]].forEach(function (p) {
+      var w = new T.Group();
+      cyl(w, 0.5, 0.5, 0.34, rub, 0, 0, 0, 20).rotation.z = Math.PI / 2;
+      cyl(w, 0.24, 0.24, 0.36, steel(), 0, 0, 0, 12).rotation.z = Math.PI / 2;
+      for (var k = 0; k < 4; k++) box(w, 0.37, 0.07, 0.42, dark, 0, 0, 0).rotation.x = k * Math.PI / 4;
+      bake(w);
+      w.position.set(p[0], 0.5, p[1]);
+      g.add(w); wheels.push(w);
+    });
+    g.userData.wheels = wheels;
+    return g;
+  }
   function prop(id) {
     if (!ready() || !PROPS[id]) return null;
     var g = new T.Group(); PROPS[id](g); bake(g); return g;
   }
 
-  return { station: station, prop: prop, ready: ready, mat: M, col: col, wood: wood, brick: brickTex, box: box, cyl: cyl, sph: sph, bake: bake, steel: steel, iron: iron, glow: glow, glass: glass, ctex: ctex, rnd: rnd,
+  return { station: station, prop: prop, jeep: jeep, ready: ready, mat: M, col: col, wood: wood, brick: brickTex, box: box, cyl: cyl, sph: sph, bake: bake, steel: steel, iron: iron, glow: glow, glass: glass, ctex: ctex, rnd: rnd,
     stripes: stripeTex, speckle: speckleTex, kprop: kprop, kfit: kfit, kput: kput, khas: khas, dish: dish, KS: KS };
 })();

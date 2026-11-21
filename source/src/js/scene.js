@@ -512,7 +512,7 @@ var Scene = (function () {
       }
       // mood
       var m;
-      if (c.state === 'out') m = c.happy ? 'happy' : 'angry';
+      if (c.state === 'out') m = c.happy ? 'happy' : c.calm ? 'neutral' : 'angry';
       else if (u.happyT > 0) { u.happyT -= dt; m = 'happy'; }
       else if (c.state === 'in') m = 'neutral';
       else { var rr = c.patience / c.maxPatience; m = sh.relax ? (rr > 0.45 ? 'neutral' : 'worried') : rr > 0.6 ? 'neutral' : rr > 0.3 ? 'worried' : 'angry'; }
@@ -714,7 +714,7 @@ var Scene = (function () {
       var e = evs[i], p;
       switch (e.type) {
         case 'arrive':
-          Sfx.play('arrive');
+          Sfx.play(e.c.drive ? 'car' : 'arrive');
           if (e.c.vip) {
             p = custPos(e.c);
             ftext(p.x, p.y - 150, 'Critique gastronomique !', 'say gold');
@@ -730,7 +730,16 @@ var Scene = (function () {
             if (e.by === 'serveur') goTo(CH.waiter, seatStaffX(e.c), null);
           }
           break;
-        case 'ask': Sfx.play('bell'); break;
+        case 'ask':
+          if (e.c.drive) {                  // a car at the drive: it honks, and the first one of the day is announced
+            Sfx.play('horn');
+            if (!sh.carSaid) {
+              sh.carSaid = true;
+              UI.toast(App.save.seenTuto.drive ? 'Une voiture attend au drive !' : 'Nouveau : le drive ! Une voiture attend à la fenêtre, à gauche.');
+              App.save.seenTuto.drive = 1;
+            }
+          } else Sfx.play('bell');
+          break;
         case 'dirty': p = custPos(e.c); if (!p.hidden) ftext(p.x, p.y - 150, 'Oh… c’est sale ici.', 'say'); break;
         case 'mid': if (e.u.by !== 'commis') Sfx.play('tick'); break;
         case 'flip': Sfx.play('flip'); if (e.by === 'commis') goTo(CH.commis, stStaffX(e.st.i), null); break;
@@ -810,11 +819,13 @@ var Scene = (function () {
           updateGoal();
           Tuto.onAction('pay', e.c);
           break;
+        case 'giveup': p = custPos(e.c); if (!p.hidden) ftext(p.x, p.y - 150, e.closed ? 'Oh, c’est fermé…' : 'Tant pis, à la prochaine !', 'say'); break;
+        case 'honk': Sfx.play('horn'); p = custPos(e.c); if (!p.hidden) ftext(p.x, p.y - 150, 'Tut tut !', 'say'); break;
         case 'angry':
           p = custPos(e.c);
           steams(p.x, p.y - 20);
           Sfx.play('angry'); Vib.buzz(80);
-          bumpCls(E.hearts, 'hit');
+          if (e.heart !== false) bumpCls(E.hearts, 'hit');
           updateHearts();
           setCharMood(CH.chef, 'worried'); CH.chef.moodT = 1.2;
           ftext(p.x, p.y - 60, pick(GRR), 'say');

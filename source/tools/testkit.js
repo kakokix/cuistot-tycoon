@@ -46,11 +46,12 @@ window.T = {
     var p = Fps._pos(g.type, g.i), s;
     if (g.type === 'station') s = { x: p.x, z: 2.9, t: p };
     else if (g.type === 'fridge') s = { x: 5.6, z: 3.0, t: p };
+    else if (g.type === 'cust' && g.i >= Game.shift().seats.length) s = { x: -6.3, z: 2.15, t: p };     // the window of the drive
     else s = { x: p.x, z: g.type === 'dirt' ? 1.5 : 1.4, t: p };
     // stay inside the walls: on a 16:9 screen the kitchen is narrower and the walking robot never
     // reached x = 5.6 (it then pushed against the wall next to the fridge until the end of the day)
     var hl = View3D.metrics().pitch * 4 + 0.75 - 0.02;
-    s.x = Math.max(-hl, Math.min(hl, s.x));
+    s.x = Math.max(Fps._xmin() + 0.02, Math.min(hl, s.x));
     return s;
   },
   _look: function (P, t) { var dx = t.x - P.x, dz = t.z - P.z, dy = t.y - 2.15; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)); },

@@ -1,13 +1,13 @@
 {
-  "version": "2.2.0",
-  "label": "2.2",
-  "build": 9,
+  "version": "2.3.0",
+  "label": "2.3",
+  "build": 10,
   "notes": [
-    "<b>La caisse</b> : le client dit sa commande, tu la tapes",
-    "Il paie tout de suite, par carte ou en espèces",
-    "En espèces : rends la bonne monnaie, le pourboire monte",
-    "Pas servi ? Il est remboursé. Service parfait : bonus !",
-    "Touches 1 à 8 et Entrée sur PC, gros boutons au doigt",
-    "Corrigé : plantes et tambours parfois invisibles"
+    "<b>Le drive</b> : des voitures s’arrêtent à la fenêtre, à gauche",
+    "Commande à emporter, pourboire doublé : c’est du bonus",
+    "Elles klaxonnent, et repartent si personne ne vient",
+    "<b>Avis des clients</b> : ta note du jour, sur 5 étoiles",
+    "Classique : après la cloche, on finit ce qui est payé",
+    "Dès le jour 4, en vue Simulateur"
   ]
 }

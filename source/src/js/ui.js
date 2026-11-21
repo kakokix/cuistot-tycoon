@@ -213,8 +213,12 @@ var UI = (function () {
     lines += '<div class="lg" style="font-size:32px;color:#6b3a14;margin-bottom:6px">JOUR ' + sh.day + (win ? ' RÉUSSI !' : '') + '</div>';
     lines += 'Gains : <b>' + fmt(sh.earned) + '</b> ' + COIN() + ' <span style="opacity:.75">(objectif ' + fmt(sh.goal) + ')</span><br>';
     lines += 'Clients servis : <b>' + sh.served + '</b>' + (sh.lost ? ' • partis fâchés : <b>' + sh.lost + '</b>' : sh.refunds ? ' • remboursés : <b>' + sh.refunds + '</b>' : sh.burnt ? ' • plats brûlés : <b>' + sh.burnt + '</b>' : '') + '<br>';
-    if (sh.tips) lines += 'Pourboires : <b>' + fmt(sh.tips) + '</b> ' + COIN() + (sh.vips ? ' • VIP : <b>' + sh.vips + '</b>' : '') + '<br>';
-    lines += 'Expérience : <b>+' + res.xpGain + ' XP</b>';
+    if (sh.tips) lines += 'Pourboires : <b>' + fmt(sh.tips) + '</b> ' + COIN() + ' • XP : <b>+' + res.xpGain + '</b><br>';
+    else lines += 'Expérience : <b>+' + res.xpGain + ' XP</b><br>';
+    // what the customers thought of the service (see Shift.rate)
+    var rt = sh.rating ? sh.rating() : 0, full = Math.round(rt);
+    if (rt) lines += 'Avis des clients : <span style="color:#e89a00;letter-spacing:1px">' + '★★★★★'.slice(0, full) + '</span><span style="color:rgba(107,58,20,.3);letter-spacing:1px">' + '★★★★★'.slice(full) + '</span> <b>' + rt.toFixed(1).replace('.', ',') + '</b>';
+    else lines += 'Avis des clients : aucun';
     if (res.bonus) lines += '<br>Bonus étoiles : <b>+' + fmt(res.bonus) + '</b> ' + COIN();
     if (!win) lines += '<br><span style="color:#a8321e">' + (sh.relax ? 'Encore un petit effort ! Améliore ta cuisine dans la boutique.' : sh.endReason === 'hearts' ? 'Trop de clients sont partis fâchés !' : 'Améliore ta cuisine dans la boutique !') + '</span>';
     var tb = txt(I, 125, 342, 470, lines, 'ptxt', 25); tb.style.lineHeight = '1.45';
@@ -710,8 +714,8 @@ var UI = (function () {
     rows.forEach(function (r) { h += '<div style="margin:0 0 5px"><b class="lg" style="font-size:21px;color:#2f8a17">' + r[0] + '</b> : ' + r[1] + '</div>'; });
     h += '<div style="margin-top:10px;border-top:3px dashed rgba(107,58,20,.3);padding-top:10px">' +
       '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">1. La caisse</b><br>Va au comptoir, vise le client qui a un « ? » et tape sa commande. Il paie tout de suite, mais il est remboursé s’il n’est pas servi !</div>' +
-      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">2. La cuisine</b><br>Chaque station a ses gestes : poser le steak, le retourner, monter le burger… Le message au milieu de l’écran te dit quoi faire.</div>' +
-      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">3. Le service</b><br>Prends les plats (3 au plus) et apporte-les au client.</div>' +
+      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">2. La cuisine</b><br>Chaque station a ses gestes (poser le steak, le retourner…). Le message au milieu de l’écran te guide.</div>' +
+      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">3. Le service</b><br>Prends les plats (3 au plus) et apporte-les au client : au comptoir, ou à la voiture du <b>drive</b> (la fenêtre à gauche, dès le jour ' + GD.SIM.drive.day + ').</div>' +
       '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">4. Le reste</b><br>Station vide ? Une caisse t’attend au <b>frigo</b>. Des miettes ? Essuie le comptoir.</div>' +
       '<span style="font-size:18px;opacity:.85">Les premiers jours, un conseil s’affiche en haut de l’écran.' + (App.save.mode === 'classique' ? ' En Classique, ce qui reste sur le feu brûle !' : '') + '</span></div>';
     var t = txt(I, 104, 180, 512, h, 'ptxt', 20); t.style.textAlign = 'left'; t.style.lineHeight = '1.22';

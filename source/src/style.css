@@ -715,6 +715,19 @@ img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
 .fps-tag span { display: block; font: 600 14px/1.3 'Fredoka', sans-serif; opacity: .85; }
 .fps-tag.tg { border-color: #8ee04a; box-shadow: 0 0 0 3px rgba(200, 255, 138, .6), 0 4px 0 rgba(0, 0, 0, .3); }
 .fps-tag.alert { background: rgba(170, 34, 14, .93); border-color: #fff; animation: tagCall .45s ease-in-out infinite alternate; }
+.fps-tag.drive { border-color: #ffd23a; }
+.fps-call { position: absolute; left: 14px; top: 44%; display: none; align-items: center; gap: 10px; padding: 9px 18px 5px 12px; border-radius: 18px; background: rgba(170, 34, 14, .93); border: 3px solid #fff; color: #fff; font: 400 24px/1 'Luckiest Guy', sans-serif; box-shadow: 0 4px 0 rgba(0, 0, 0, .3); animation: callPulse .45s ease-in-out infinite alternate; pointer-events: none; white-space: nowrap; }
+.fps-call.on { display: flex; }
+.fps-call.r { left: auto; right: 14px; flex-direction: row-reverse; }
+.fps-call i { width: 0; height: 0; border: 12px solid transparent; border-left-width: 0; border-right-color: #fff; margin-bottom: 4px; }
+.fps-call.r i { border-right-width: 0; border-left: 12px solid #fff; }
+.fps-call span { font: 600 15px/1.2 'Fredoka', sans-serif; opacity: .9; margin-bottom: 4px; }
+.fps-hud.posing .fps-call { display: none; }
+.wide .fps-call { zoom: 1.3; }
+@keyframes callPulse { from { transform: scale(1); } to { transform: scale(1.07); } }
+.fps-tickets .tk.car { border-style: dashed; }
+.fps-tickets .tk.car::before { content: 'DRIVE'; position: absolute; left: 8px; top: -12px; padding: 2px 7px 0; border-radius: 8px; background: #c62828; color: #fff; font: 400 13px/1.3 'Luckiest Guy', sans-serif; }
+.reg-say .reg-drive { flex: none; padding: 5px 10px 1px; border-radius: 10px; background: #c62828; color: #fff; font: 400 17px/1.2 'Luckiest Guy', sans-serif; text-decoration: none; }
 @keyframes tagCall { from { transform: translate(-50%, -100%) scale(1); } to { transform: translate(-50%, -100%) scale(1.12); } }
 .fps-tag.dirt { font-size: 16px; padding: 5px 12px 2px; border-color: #9fd8ff; border-radius: 13px; }
 .t-btns .t-club { display: flex; align-items: center; justify-content: center; background-size: contain; background-repeat: no-repeat; background-position: center; }

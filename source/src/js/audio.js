@@ -78,6 +78,8 @@ var Sfx = (function () {
     // ---- the simulator: the noises of a kitchen ----
     step: function (t) { noise(t, 0.07, 0.085, 210, 'lowpass'); tone(92, t, 0.06, 'sine', 0.07, null, 60); },
     step2: function (t) { noise(t, 0.07, 0.075, 260, 'lowpass'); tone(104, t, 0.06, 'sine', 0.06, null, 66); },
+    horn: function (t) { tone(392, t, 0.15, 'square', 0.06); tone(494, t, 0.15, 'square', 0.05); tone(392, t + 0.22, 0.26, 'square', 0.06); tone(494, t + 0.22, 0.26, 'square', 0.05); },
+    car: function (t) { noise(t, 1.2, 0.06, 260, 'lowpass'); tone(82, t, 1.1, 'sawtooth', 0.04, null, 48); },
     bell: function (t) { tone(1975, t, 0.55, 'sine', 0.2); tone(3951, t, 0.3, 'sine', 0.05); tone(1975, t + 0.16, 0.5, 'sine', 0.12); },
     order: function (t) { tone(1240, t, 0.06, 'square', 0.05); tone(1660, t + 0.09, 0.07, 'square', 0.05); noise(t + 0.2, 0.12, 0.04, 3000, 'bandpass'); },
     flip: function (t) { noise(t, 0.4, 0.2, 5200, 'highpass'); noise(t, 0.12, 0.12, 900, 'bandpass'); },

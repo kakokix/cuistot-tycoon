@@ -29,6 +29,11 @@ var View3D = (function () {
   var quality = 2, gov = { last: 0, sum: 0, n: 0, until: 0, warned: false };
   var COUNTER_TOP = 1.2, Z_CUST = -1.15, Z_STAFF = 2.1, Z_BACK = -18, ENV = 0.5;
   // wide layout (world units)
+  // the drive (first person): the window in the left wall, and the track of the cars along that wall.
+  // x: the middle of the track; z0 -> zs: a car drives up and stops; zs -> z1: it drives away;
+  // seat: where the driver sits in the car (the bust picture is put there)
+  var DRV = { wz: [1.35, 2.95], wy: [1.28, 2.62], x: -9.15, z0: -25.5, zs: 2.45, z1: 18.5, seat: [0.45, 1.1, -0.3], h: 1.08 };
+  var PAINTS = [0xd9432f, 0x2fb5a8, 0xf2b632, 0x3a78c9, 0xf2efe6, 0xef7d2a];
   var WD = { zSt: 4.35, wtTop: 0.92, zStaff: 3.5, pitch: 1.2, unit: 0.004, custHalf: 5, postX: 8, geo: [], counterY: 660, zBack: -21 };
   var TITLE = { pos: [-3.3, 3.7, 10.6], look: [-2.5, 2.05, 0] };
 
@@ -289,13 +294,32 @@ var View3D = (function () {
     M.wallS = std(0xffffff, { map: woodTex('wallS', ws), roughness: 0.85 });
     plane(17, 7.4, M.roofM, 0, 4.3, 2.0, Math.PI / 2, 0);              // roof (seen from below)
     plane(17, 4.4, M.wallM, 0, 2.15, 5.25, 0, Math.PI);                // back wall
-    plane(6.6, 4.4, M.wallS, -7.8, 2.15, 2.2, 0, Math.PI / 2);         // left wall
+    // left wall, in four pieces around the window of the drive (the planks run through the pieces)
+    function wallL(za, zb, ya, yb) {
+      var m = plane(zb - za, yb - ya, M.wallS, -7.8, (ya + yb) / 2, (za + zb) / 2, 0, Math.PI / 2), uv = m.geometry.attributes.uv;
+      for (var q = 0; q < uv.count; q++) uv.setXY(q, (5.5 - zb + uv.getX(q) * (zb - za)) / 6.6, (ya + uv.getY(q) * (yb - ya)) / 4.4);
+    }
+    var WZ = DRV.wz, WY = DRV.wy;
+    wallL(-1.1, WZ[0], 0, 4.4); wallL(WZ[1], 5.5, 0, 4.4); wallL(WZ[0], WZ[1], 0, WY[0]); wallL(WZ[0], WZ[1], WY[1], 4.4);
     plane(6.6, 4.4, M.wallS, 7.8, 2.15, 2.2, 0, -Math.PI / 2);         // right wall
     var beamM = std(0xffffff, { map: woodTex('post', { h: 25, s: 48, l: 40, n: 2, seed: 31, rep: [2, 3] }) });
     for (var x = -6; x <= 6; x += 3) st.add(mesh(new T.BoxGeometry(0.2, 0.26, 7.2), beamM, x, 4.14, 2.0, false));
     st.add(mesh(new T.BoxGeometry(17, 0.34, 0.3), beamM, 0, 4.05, -1.0, false));
     st.add(mesh(new T.BoxGeometry(17, 0.22, 0.16), beamM, 0, 0.11, 5.2, false));
     [-7.7, 7.7].forEach(function (px) { st.add(mesh(new T.BoxGeometry(0.3, 4.3, 0.3), beamM, px, 2.15, -1.0, false)); });
+    // the window of the drive: a frame as thick as the wall, a sill for the dishes, a sign above
+    var wzm = (WZ[0] + WZ[1]) / 2, wzw = WZ[1] - WZ[0];
+    st.add(mesh(new T.BoxGeometry(0.3, 0.12, wzw + 0.24), beamM, -7.88, WY[1] + 0.06, wzm, false));
+    [WZ[0] - 0.06, WZ[1] + 0.06].forEach(function (pz) { st.add(mesh(new T.BoxGeometry(0.3, WY[1] - WY[0], 0.12), beamM, -7.88, (WY[0] + WY[1]) / 2, pz, false)); });
+    st.add(mesh(new T.BoxGeometry(0.7, 0.08, wzw + 0.36), std(0xffffff, { map: woodTex('sill', { h: 34, s: 52, l: 62, n: 3, seed: 9, rep: [1, 1] }), roughness: 0.6 }), -7.82, WY[0] - 0.04, wzm, false));
+    [1.1, 3.3].forEach(function (pz) { st.add(mesh(new T.BoxGeometry(0.12, 4.3, 0.16), beamM, -7.72, 2.15, pz, false)); });
+    var sign = new T.Mesh(new T.PlaneGeometry(1.5, 0.5), new T.MeshStandardMaterial({ roughness: 0.7, map: Models.ctex('drivesign', 384, 128, function (c2, w, h) {
+      c2.fillStyle = '#c62828'; c2.fillRect(0, 0, w, h);
+      c2.strokeStyle = '#fff3d6'; c2.lineWidth = 8; c2.strokeRect(8, 8, w - 16, h - 16);
+      c2.fillStyle = '#fff3d6'; c2.textAlign = 'center'; c2.textBaseline = 'middle';
+      c2.font = '86px "Luckiest Guy", "Arial Black", sans-serif'; c2.fillText('DRIVE', w / 2, h / 2 + 8);
+    }) }));
+    sign.position.set(-7.74, 3.42, wzm); sign.rotation.y = Math.PI / 2; st.add(sign);
     var pack = Models.khas('wall_panel');          // the props of the pack "Kitchen & Diner 3D" are in the build
     function kp(name, x, y, z, ry, sc) { return Models.kput(st, name, x, y, z, ry, sc); }
     // a shelf on the back wall; items: [name, x, turn, scale, lift] standing on the board
@@ -311,7 +335,10 @@ var View3D = (function () {
         for (var r = 0; r < 2; r++) kp('floor_checker', -7.5 + i * 2.5, 0.004, 1.85 + r * 2.5, 0);
       }
       [-1, 1].forEach(function (sd) {
-        for (var j = 0; j < 3; j++) { var wp = kp('wall_panel', sd * 7.75, 0, j * 2.2, -sd * Math.PI / 2); if (wp) wp.scale.x *= 0.88; }
+        for (var j = 0; j < 3; j++) {
+          if (sd < 0 && j === 1) continue;             // the bay of the drive window is of wood
+          var wp = kp('wall_panel', sd * 7.75, 0, j * 2.2, -sd * Math.PI / 2); if (wp) wp.scale.x *= 0.88;
+        }
       });
       shelfAt(-4.2, 2.75, [['kettle', -0.5, 0.5], ['toaster', 0.04, 0], ['mug', 0.5, 0.7], ['mug', 0.68, -0.5]]);
       shelfAt(0, 2.75, [['pot', -0.5, 0], ['frying_pan', 0.02, 0.25], ['plate', 0.62, 0], ['plate', 0.62, 0, 1, 0.03], ['plate', 0.62, 0, 1, 0.06]]);
@@ -320,6 +347,7 @@ var View3D = (function () {
       // left end: two cabinets around the back door, with the microwave and a little snack
       kp('counter_base', -7.36, 0, 3.3, Math.PI / 2); kp('microwave', -7.36, 1.15, 3.3, Math.PI / 2);
       kp('counter_base', -7.36, 0, 1.12, Math.PI / 2);
+      kp('counter_base', -7.36, 0, 2.21, Math.PI / 2);        // under the window of the drive
       kp('plate', -7.34, 1.15, 0.98, 0); kp('donut', -7.34, 1.17, 0.98, 0.4, 1.5); kp('mug', -7.3, 1.15, 1.34, 2.2);
     } else {
       [-4.2, 0, 4.2].forEach(function (sx, k) {
@@ -337,12 +365,11 @@ var View3D = (function () {
     // right end: fridge and sink.  left wall: the back door
     put('fridge', 7.26, 0, 3.05, -Math.PI / 2, 1.25);
     put('sink', 7.4, 0, 1.6, -Math.PI / 2, 1.08);
-    put('door', -7.7, 0, 2.15, Math.PI / 2);
     // outside: the ground, a terrace, the horizon
     M.groundM = new T.MeshStandardMaterial({ color: 0x5e8f3a, roughness: 1, map: Models.speckle([70, 10]) });
     plane(340, 50, M.groundM, 0, -0.02, -25.4, -Math.PI / 2, 0);
     var canopy = [0xe8433a, 0x2a8ccc, 0xffb300, 0x43b047];
-    [[-4.5, -5.4], [4.2, -6.2], [-9.5, -9.5], [9.5, -8.6], [0.5, -11.5], [-15, -7], [15, -7.5]].forEach(function (p, k) {
+    [[-4.5, -5.4], [4.2, -6.2], [-13, -10.6], [9.5, -8.6], [0.5, -11.5], [-15.6, -5.8], [15, -7.5]].forEach(function (p, k) {
       var t;
       if (pack && k < 4) {             // the nearest tables: diner table and chairs of the pack under the parasol
         t = Models.prop('parasolTop');
@@ -362,8 +389,28 @@ var View3D = (function () {
       t.position.set(p[0], 0, p[1]);
       st.add(t);
     });
+    // the drive outside: the ground along the left wall, the track, a hedge behind it, and bushes
+    // where the track comes out of the jungle (the cars appear from behind them)
+    var gl2 = plane(52, 20.4, M.groundM, -33.8, -0.02, 9.8, -Math.PI / 2, 0), guv = gl2.geometry.attributes.uv;
+    for (var q2 = 0; q2 < guv.count; q2++) guv.setXY(q2, guv.getX(q2) * 52 / 340, guv.getY(q2) * 20.4 / 50);
+    M.laneM = new T.MeshStandardMaterial({ color: 0xb89a6c, roughness: 1, map: Models.speckle([1, 14]) });
+    plane(2.9, 42.5, M.laneM, DRV.x, 0.012, -4.75, -Math.PI / 2, 0);
+    M.hedgeM = new T.MeshStandardMaterial({ color: 0x3f8a3a, roughness: 1, map: Models.speckle([9, 2]) });
+    st.add(mesh(new T.BoxGeometry(1.1, 2.6, 21), M.hedgeM, -11.7, 1.3, 8, false));
+    [[-9.3, 1.3, -26.6, 2.4], [-11.4, 1.1, -25.2, 1.9], [-7.3, 1.0, -25.6, 1.8], [-9.8, 3.0, -27.4, 1.9], [-13, 0.9, -23.8, 1.5], [-6, 0.8, -27.5, 1.6]].forEach(function (b) {
+      var bm = mesh(new T.SphereGeometry(b[3], 14, 10), M.hedgeM, b[0], b[1], b[2], false); bm.scale.y = 0.85; st.add(bm);
+    });
     Models.bake(st);
     g.traverse(function (o) { if (o.isMesh) o.castShadow = false; });
+    // the car of the drive: one jeep, repainted for each customer
+    M.carPaint = new T.MeshStandardMaterial({ color: PAINTS[0], roughness: 0.4, metalness: 0.3 });
+    M.car = Models.jeep(M.carPaint);
+    if (M.car) {
+      M.car.traverse(function (o) { if (o.isMesh) o.castShadow = o.receiveShadow = false; });
+      var blob = new T.Mesh(new T.CircleGeometry(1, 20), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.26, depthWrite: false }));
+      blob.rotation.x = -Math.PI / 2; blob.scale.set(1.35, 2.5, 1); blob.position.y = 0.03; M.car.add(blob);
+      M.car.visible = false; M.carC = null; scene.add(M.car);
+    }
     // the awning in front of the roof: it also hides the top edge of the painted horizon
     M.awnM = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: T.DoubleSide });
     var aw = new T.Mesh(new T.BoxGeometry(36, 0.04, 2.5), M.awnM); aw.position.set(0, 3.97, -2.2); aw.rotation.x = -0.225; g.add(aw);
@@ -432,6 +479,8 @@ var View3D = (function () {
     M.backF.material.map = texCache[key]; M.backF.material.needsUpdate = true;
     var w = WOODS[loc.id] || WOODS.jungle, a = AWN[loc.id] || AWN.jungle;
     M.roofM.color.setHex(w[0]); M.wallM.color.setHex(w[1]); M.wallS.color.setHex(w[1]);
+    M.laneM.color.setHex({ jungle: 0xb89a6c, plage: 0xc9ac78, montagne: 0x9aa3ad, ville: 0x5a5a63 }[loc.id] || 0xb89a6c);
+    M.hedgeM.color.setHex({ jungle: 0x3f8a3a, plage: 0x4f9a46, montagne: 0x3d6b4a, ville: 0x3f7f42 }[loc.id] || 0x3f8a3a);
     M.awnM.map = Models.stripes(a[0], a[1], [24, 1]); M.awnM.needsUpdate = true;
   }
   // the tray comes up when the player carries something
@@ -844,9 +893,9 @@ var View3D = (function () {
     } catch (e) { }
     return (shirtCol[key] = c);
   }
-  function domFor(x, topY, out) {
-    var ty = project(V2.set(x, topY, Z_CUST), tmp).y, px = tmp.x;
-    var line = project(V2.set(x, COUNTER_TOP + 0.07, -0.66), tmp).y;
+  function domFor(x, topY, out, z) {
+    var ty = project(V2.set(x, topY, z == null ? Z_CUST : z), tmp).y, px = tmp.x;
+    var line = z == null ? project(V2.set(x, COUNTER_TOP + 0.07, -0.66), tmp).y : project(V2.set(x, topY - 1.0, z), tmp).y;
     out.sc = Math.max(0.5, (line - ty) / 208);
     out.x = px; out.top = line + 16 * out.sc - 224;
     return out;
@@ -854,7 +903,23 @@ var View3D = (function () {
   function seatScreen(seat, n) {
     if (!built || !full) return { x: 0, top: 0, sc: 1 };
     var cd = custDim(n);
+    if (seat >= n) return domFor(DRV.x + DRV.seat[0], DRV.seat[1] + DRV.h, { x: 0, top: 0, sc: 1 }, DRV.zs + DRV.seat[2]);      // the driver at the drive
     return domFor(seatWorldX(seat, n), cd.base + cd.h, { x: 0, top: 0, sc: 1 });
+  }
+  // the car of the drive follows its customer: it drives up, waits at the window, drives away
+  function syncCar(st) {
+    var car = M.car;
+    if (!car) return;
+    var s2 = st.sh, c = fpsOn && s2 && s2.manual && !s2.over ? s2.car : null;
+    if (!c) { car.visible = false; M.carC = null; return; }
+    if (M.carC !== c) { M.carC = c; M.carPaint.color.setHex(PAINTS[(c.paint || 0) % PAINTS.length]); car.position.z = DRV.z0; }
+    var D = GD.SIM.drive, z = DRV.zs, u;
+    if (c.state === 'in') { u = Math.min(1, c.stateT / D.inT); z = DRV.z0 + (DRV.zs - DRV.z0) * (1 - (1 - u) * (1 - u)); }
+    else if (c.state === 'out') { u = Math.min(1, c.stateT / D.outT); z = DRV.zs + (DRV.z1 - DRV.zs) * u * u; }
+    var roll = (z - car.position.z) / 0.5, ws = car.userData.wheels;
+    for (var i = 0; i < ws.length; i++) ws[i].rotation.x += roll;
+    car.position.set(DRV.x, z === DRV.zs ? Math.sin(time * 31) * 0.004 : 0, z);       // the engine idles at the window
+    car.visible = true;
   }
   function syncCustomers(st) {
     var CU = st.CU, L = st.L, seen = {};
@@ -868,6 +933,17 @@ var View3D = (function () {
       setSpriteKey(s, key);
       var body = s.userData.body;
       if (body) body.visible = false;
+      if (c.drive) {                       // the driver of the drive: his bust sits in the car
+        var car = M.car, on3 = !!car && car.visible && M.carC === c;
+        if (on3) {
+          s.scale.set(DRV.h * 0.75, DRV.h, 1);
+          s.position.set(car.position.x + DRV.seat[0], DRV.seat[1], car.position.z + DRV.seat[2]);
+          s.userData.top = DRV.seat[1] + DRV.h; s.userData.x = s.position.x; s.userData.z = s.position.z;
+        }
+        s.material.opacity = u.op == null ? 1 : u.op;
+        s.visible = on3 && s.material.map.userData.ready !== false;
+        return;
+      }
       if (full) {
         var cd = custDim(n), hw = cd.h, xw = seatWorldX(c.seat, n), dy = (u.y || 0) / 224 * hw;
         s.scale.set(hw * 0.75, hw, 1);
@@ -1038,6 +1114,13 @@ var View3D = (function () {
     }
   }
 
+  // is this point (outside, on the left) seen from the camera through the window of the drive?
+  function throughWindow(x, y, z) {
+    var cx = cam.position.x, k = (-7.8 - cx) / (x - cx);
+    if (!(k > 0 && k < 1)) return false;
+    var zc = cam.position.z + k * (z - cam.position.z), yc = cam.position.y + k * (y - cam.position.y);
+    return zc > DRV.wz[0] && zc < DRV.wz[1] && yc > DRV.wy[0] && yc < DRV.wy[1];
+  }
   // after rendering: move the HTML layer (bubbles, name tags, station labels, tap zones) onto the 3D objects
   var dm = { x: 0, top: 0, sc: 1 };
   function syncDom(st) {
@@ -1045,9 +1128,11 @@ var View3D = (function () {
     Object.keys(CU).forEach(function (id) {
       var u = CU[id], s = custSpr[id];
       if (!s) return;
-      domFor(s.userData.x, s.userData.top, dm);
+      domFor(s.userData.x, s.userData.top, dm, s.userData.z);
       var x = dm.x, sc = dm.sc, top = dm.top;
       var vis = !fpsOn || (tmp.z < 1 && x > -200 && x < W + 200 && sc < 8);
+      // the driver's bubble shows only when he can be seen through the window of the drive
+      if (vis && u.c.drive) vis = s.visible && throughWindow(s.userData.x, s.userData.top - 0.35, s.userData.z);
       if (u.vis !== vis) { u.vis = vis; u.el.style.visibility = vis ? '' : 'hidden'; }
       if (!vis) return;
       // first person: the box follows the bust, but the bubble and the name keep a readable size
@@ -1189,6 +1274,7 @@ var View3D = (function () {
       govern();
       buildProps();
       setRestCamera();
+      syncCar(st);
       syncCustomers(st);
       syncStaff(st, fp);
       if (full) { syncStations(st, dt); syncTitle(title && wide); }
