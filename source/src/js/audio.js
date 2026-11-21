@@ -74,8 +74,51 @@ var Sfx = (function () {
     friend: function (t) { [784, 988, 1175, 1568].forEach(function (f, i) { mallet(f, t + i * 0.07, 0.18); }); },
     tick: function (t) { tone(1500, t, 0.04, 'square', 0.05); },
     whoosh: function (t) { noise(t, 0.3, 0.12, 900, 'bandpass'); },
-    pop: function (t) { tone(400, t, 0.08, 'sine', 0.25, null, 800); }
+    pop: function (t) { tone(400, t, 0.08, 'sine', 0.25, null, 800); },
+    // ---- the simulator: the noises of a kitchen ----
+    step: function (t) { noise(t, 0.07, 0.085, 210, 'lowpass'); tone(92, t, 0.06, 'sine', 0.07, null, 60); },
+    step2: function (t) { noise(t, 0.07, 0.075, 260, 'lowpass'); tone(104, t, 0.06, 'sine', 0.06, null, 66); },
+    bell: function (t) { tone(1975, t, 0.55, 'sine', 0.2); tone(3951, t, 0.3, 'sine', 0.05); tone(1975, t + 0.16, 0.5, 'sine', 0.12); },
+    order: function (t) { tone(1240, t, 0.06, 'square', 0.05); tone(1660, t + 0.09, 0.07, 'square', 0.05); noise(t + 0.2, 0.12, 0.04, 3000, 'bandpass'); },
+    flip: function (t) { noise(t, 0.4, 0.2, 5200, 'highpass'); noise(t, 0.12, 0.12, 900, 'bandpass'); },
+    cooked: function (t) { mallet(1318, t, 0.24); mallet(1760, t + 0.1, 0.16); },
+    burnt: function (t) { tone(150, t, 0.45, 'sawtooth', 0.1, null, 70); noise(t, 0.5, 0.1, 500, 'lowpass'); },
+    trash: function (t) { noise(t, 0.2, 0.14, 650, 'bandpass'); tone(170, t + 0.05, 0.14, 'triangle', 0.14, null, 80); },
+    crate: function (t) { tone(120, t, 0.12, 'triangle', 0.22, null, 60); noise(t, 0.1, 0.1, 500, 'lowpass'); },
+    restock: function (t) { tone(130, t, 0.1, 'triangle', 0.2, null, 70); noise(t, 0.09, 0.09, 600, 'lowpass'); tone(150, t + 0.14, 0.1, 'triangle', 0.16, null, 80); mallet(988, t + 0.26, 0.14); },
+    wipe: function (t) { noise(t, 0.2, 0.09, 1900, 'bandpass'); noise(t + 0.14, 0.2, 0.08, 2500, 'bandpass'); },
+    stack: function (t) { tone(480, t, 0.07, 'triangle', 0.2, null, 720); noise(t, 0.05, 0.05, 2400, 'bandpass'); },
+    pour: function (t) { noise(t, 0.5, 0.09, 1500, 'bandpass'); tone(500, t, 0.5, 'sine', 0.05, null, 900); },
+    chop: function (t) { [0, 0.11, 0.22].forEach(function (d) { noise(t + d, 0.05, 0.13, 2000, 'bandpass'); tone(210, t + d, 0.05, 'triangle', 0.12, null, 120); }); },
+    splash: function (t) { noise(t, 0.45, 0.16, 3600, 'highpass'); noise(t, 0.3, 0.1, 800, 'bandpass'); }
   };
+  // ---- ambient loops (simulator): filtered noise whose volume follows what is cooking near the player ----
+  var AMB = { sizzle: ['highpass', 4600, 0.7, 0.12], fry: ['bandpass', 1150, 0.9, 0.13], boil: ['lowpass', 380, 0.7, 0.2], whirr: ['bandpass', 250, 7, 0.16] };
+  var ambN = {};
+  function amb(levels) {
+    if (!ctx || ctx.state !== 'running') return;
+    Object.keys(AMB).forEach(function (k) {
+      var want = vol.sfx > 0.001 ? ((levels && levels[k]) || 0) : 0, n = ambN[k], c = AMB[k];
+      if (!n && want <= 0.001) return;
+      if (!n) {
+        try {
+          var src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+          src.buffer = noiseBuf; src.loop = true;
+          f.type = c[0]; f.frequency.value = c[1]; f.Q.value = c[2];
+          g.gain.value = 0;
+          src.connect(f); f.connect(g); g.connect(sfxG); src.start();
+          n = ambN[k] = { s: src, g: g };
+        } catch (e) { return; }
+      }
+      // a little flutter: the fat crackles, the oil bubbles
+      var fl = k === 'sizzle' ? 0.7 + Math.random() * 0.6 : k === 'fry' ? 0.8 + Math.random() * 0.4 : 1;
+      n.g.gain.setTargetAtTime(want * c[3] * fl, ctx.currentTime, 0.09);
+    });
+  }
+  function ambOff() {
+    Object.keys(ambN).forEach(function (k) { try { ambN[k].s.stop(); ambN[k].g.disconnect(); } catch (e) { } });
+    ambN = {};
+  }
   function play(name) {
     if (!ctx || vol.sfx <= 0.001) return;
     if (ctx.state === 'suspended') return;
@@ -124,5 +167,5 @@ var Sfx = (function () {
   function setVol(m, s) { vol.music = m; vol.sfx = s; applyVol(); }
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
-  return { unlock: unlock, play: play, music: music, setVol: setVol, setTempo: setTempo, suspend: suspend, resume: resume };
+  return { unlock: unlock, play: play, music: music, setVol: setVol, setTempo: setTempo, suspend: suspend, resume: resume, amb: amb, ambOff: ambOff };
 })();

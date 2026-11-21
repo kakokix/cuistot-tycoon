@@ -271,25 +271,62 @@ var Models = (function () {
     lid.rotation.x = -0.55;
     cyl(lid, 0.016, 0.016, 0.5, black(), 0, 0.3, 0.14, 8).rotation.z = Math.PI / 2;
     // food: three patties with grill marks, one bun waiting
-    var food = grp(g, 0, 0.345, 0, true), patty = col(0x6b3a1c, 0.75), mark = col(0x2a1608, 0.8);
+    var food = grp(g, 0, 0.345, 0, true), mark = col(0x2a1608, 0.8), pats = [];
     [-0.26, 0, 0.26].forEach(function (x, k) {
       var p = grp(food, x, 0, k === 1 ? -0.06 : 0.05);
-      cyl(p, 0.085, 0.09, 0.034, patty, 0, 0.017, 0, 18);
-      [-0.03, 0.03].forEach(function (z) { box(p, 0.13, 0.004, 0.012, mark, 0, 0.036, z); });
+      var pm = new T.MeshStandardMaterial({ color: 0x6b3a1c, roughness: 0.75 });     // its own colour: raw, cooked, burnt
+      cyl(p, 0.085, 0.09, 0.034, pm, 0, 0.017, 0, 18);
+      var mk = grp(p, 0, 0, 0);
+      [-0.03, 0.03].forEach(function (z) { box(mk, 0.13, 0.004, 0.012, mark, 0, 0.036, z); });
+      pats.push({ g: p, m: pm, marks: mk });
     });
     var bun = col(0xe2a551, 0.6);
-    sph(g, 0.085, bun, 0.36, 0.36, -0.14, 1, 0.55, 1); cyl(g, 0.083, 0.08, 0.025, bun, 0.36, 0.345, -0.14, 16);
+    var bunG = grp(g, 0.36, 0.345, -0.14, true);          // a bun waiting (manager's view)
+    sph(bunG, 0.085, bun, 0, 0.015, 0, 1, 0.55, 1); cyl(bunG, 0.083, 0.08, 0.025, bun, 0, 0, 0, 16);
+    // simulator: the burger being built, layer after layer, next to the grate
+    var asm = grp(g, 0.37, 0.345, -0.13, true), lay = [];
+    lay.push(cyl(asm, 0.083, 0.078, 0.028, bun, 0, 0.014, 0, 16));
+    lay.push(cyl(asm, 0.085, 0.088, 0.03, col(0x5a3018, 0.75), 0, 0.044, 0, 18));
+    var chz = box(asm, 0.16, 0.008, 0.16, col(0xffc531, 0.5), 0, 0.064, 0); chz.rotation.y = 0.78; lay.push(chz);
+    lay.push(cyl(asm, 0.094, 0.094, 0.012, col(0x57b83a, 0.7), 0, 0.075, 0, 9));
+    asm.visible = false;
     // spatula
     var sp = grp(g, -0.36, 0.35, -0.15); sp.rotation.y = 0.5;
     box(sp, 0.09, 0.006, 0.11, steel(), 0, 0, 0.05); cyl(sp, 0.008, 0.008, 0.16, steelD(), 0, 0.012, -0.08, 6).rotation.x = Math.PI / 2;
     box(sp, 0.026, 0.02, 0.1, black(), 0, 0.016, -0.2, 0.008);
     var fl = flames(g, [[-0.3, 0.33, 0.12], [-0.1, 0.33, -0.1], [0.12, 0.33, 0.13], [0.3, 0.33, -0.08]], 'fire', 0xffa02a, 0.09);
+    var RAW = new T.Color(0xdb8c84), DONE = new T.Color(0x6b3a1c), BURNT = new T.Color(0x17110d), mode = -1;
     return function (dt, t, s) {
-      var k = s.cooking ? 1 : 0.25;
+      var k = s.cooking ? 1 : 0.25, h = s.h, i;
       ember.material.emissiveIntensity = (0.5 + 0.35 * Math.sin(t * 9) * 0.3) * (s.cooking ? 2.2 : 0.9);
       fl(t, s.cooking ? 0.9 : 0);
-      for (var i = 0; i < food.children.length; i++) food.children[i].position.y = s.cooking ? Math.abs(Math.sin(t * 23 + i * 2)) * 0.006 : 0;
-      food.scale.setScalar(1 + (k - 0.25) * 0.02);
+      if ((h ? 1 : 0) !== mode) {
+        mode = h ? 1 : 0; bunG.visible = !h; asm.visible = false;
+        for (i = 0; i < 3; i++) { pats[i].g.visible = !h; pats[i].m.color.copy(DONE); pats[i].marks.visible = true; pats[i].g.rotation.x = 0; pats[i].g.position.y = 0; }
+      }
+      if (!h) {
+        for (i = 0; i < 3; i++) pats[i].g.position.y = s.cooking ? Math.abs(Math.sin(t * 23 + i * 2)) * 0.006 : 0;
+        food.scale.setScalar(1 + (k - 0.25) * 0.02);
+        return;
+      }
+      // simulator: one steak per thing on the fire, and the burger that is being built
+      var by = [null, null, null], a = null;
+      for (i = 0; i < h.cooking.length; i++) { var u0 = h.cooking[i]; if (u0.ph === 'fin') a = a || u0; else by[(u0.slot || 0) % 3] = u0; }
+      for (i = 0; i < 3; i++) {
+        var u = by[i], p = pats[i];
+        p.g.visible = !!u;
+        if (!u) continue;
+        if (u.ph === 'burnt') p.m.color.copy(BURNT); else p.m.color.copy(RAW).lerp(DONE, Math.min(1, u.t / u.total * 1.3));
+        p.marks.visible = !!u.flip || u.ph === 'burnt';
+        if (u.flip && !u._fl) { u._fl = 1; u._ft = 0.001; }          // it jumps and turns over
+        if (u._ft) {
+          u._ft += dt; var q = Math.min(1, u._ft / 0.32);
+          p.g.rotation.x = Math.PI * q; p.g.position.y = Math.sin(Math.PI * q) * 0.1;
+          if (q >= 1) { u._ft = 0; p.g.rotation.x = 0; p.g.position.y = 0; }
+        } else p.g.position.y = u.ph === 'cook' ? Math.abs(Math.sin(t * 23 + i * 2)) * 0.005 : 0;
+      }
+      asm.visible = !!a;
+      if (a) for (i = 0; i < lay.length; i++) lay[i].visible = a.fin >= (i < 2 ? 1 : 2);
     };
   };
 
@@ -323,10 +360,16 @@ var Models = (function () {
     // stack of cups
     for (i = 0; i < 3; i++) cyl(g, 0.045, 0.036, 0.1, glass(), 0.42, 0.235 + i * 0.03, 0.16, 14, true);
     return function (dt, t, s) {
-      juice.rotation.y += dt * (s.cooking ? 22 : 0);
-      juice.scale.y = s.cooking ? 1 + Math.sin(t * 30) * 0.03 : 1;
-      bl.position.x = -0.3 + (s.cooking ? Math.sin(t * 60) * 0.003 : 0);
-      bl.rotation.z = s.cooking ? Math.sin(t * 47) * 0.012 : 0;
+      var run = s.cooking, h = s.h;
+      if (h) {                              // simulator: the blender is empty until the fruits go in
+        var u = null;
+        for (var i = 0; i < h.cooking.length; i++) if (h.cooking[i].ph !== 'fin') { u = h.cooking[i]; break; }
+        juice.visible = !!u; run = !!u && u.ph === 'cook';
+      } else juice.visible = true;
+      juice.rotation.y += dt * (run ? 22 : 0);
+      juice.scale.y = run ? 1 + Math.sin(t * 30) * 0.03 : 1;
+      bl.position.x = -0.3 + (run ? Math.sin(t * 60) * 0.003 : 0);
+      bl.rotation.z = run ? Math.sin(t * 47) * 0.012 : 0;
     };
   };
 
@@ -361,17 +404,32 @@ var Models = (function () {
         f.rotation.set((r() - 0.5) * 1.2, r() * 3.1, (r() - 0.5) * 1.2);
       }
       bake(b);
+      // the fries of this basket get their own colour (pale, golden, burnt) and can be taken out
+      b.children.forEach(function (me) { if (me.isMesh && me.material === fry) { me.material = fry.clone(); b.userData.fries = me; } });
       b.userData.k = k; baskets.push(b);
       for (i = 0; i < 6; i++) { var bb = sph(g, 0.014, col(0xf7e0a0, 0.3), x + (r() - 0.5) * 0.3, 0.384, 0.045 + (r() - 0.5) * 0.28); bb.userData.dyn = true; bb.userData.ph = r() * 6; bubbles.push(bb); }
     });
+    var PALE = new T.Color(0xf4e8bd), GOLD = new T.Color(0xf7c948), DARK = new T.Color(0x3d2814);
     return function (dt, t, s) {
+      var h = s.h, hot = [s.cooking, s.cooking];
       for (var i = 0; i < baskets.length; i++) {
-        var b = baskets[i], target = s.cooking ? 0.405 : 0.5;
+        var b = baskets[i], fr = b.userData.fries, down = s.cooking;
+        if (h) {                            // simulator: basket i = the thing cooking in tank i
+          var u = null;
+          for (var q = 0; q < h.cooking.length; q++) if ((h.cooking[q].slot || 0) % 2 === i) { u = h.cooking[q]; break; }
+          down = !!u && u.ph !== 'fin';
+          hot[i] = down && u.ph !== 'burnt';
+          if (fr) {
+            fr.visible = !!u;
+            if (u) { if (u.ph === 'burnt') fr.material.color.copy(DARK); else fr.material.color.copy(PALE).lerp(GOLD, Math.min(1, u.t / u.total)); }
+          }
+        } else if (fr) { fr.visible = true; fr.material.color.copy(GOLD); }
+        var target = down ? 0.405 : 0.5;
         b.position.y += (target - b.position.y) * Math.min(1, dt * 6);
-        b.rotation.z = s.cooking ? Math.sin(t * 9 + i) * 0.015 : 0;
+        b.rotation.z = hot[i] ? Math.sin(t * 9 + i) * 0.015 : 0;
       }
       for (i = 0; i < bubbles.length; i++) {
-        var k = s.cooking ? Math.max(0, Math.sin(t * 7 + bubbles[i].userData.ph)) : 0;
+        var k = hot[i < 6 ? 0 : 1] ? Math.max(0, Math.sin(t * 7 + bubbles[i].userData.ph)) : 0;
         bubbles[i].scale.setScalar(0.01 + k * 1.3); bubbles[i].visible = k > 0.05;
       }
     };
@@ -397,17 +455,33 @@ var Models = (function () {
     box(g, 0.08, 0.02, 0.07, stone, -0.19, 0.3, 0.315); box(g, 0.08, 0.02, 0.07, stone, 0.19, 0.3, 0.315);
     var cav = add(g, new T.CircleGeometry(0.17, 20, 0, Math.PI), col(0x120a06, 1), 0, 0.3, 0.312);
     var fire = add(g, new T.CircleGeometry(0.15, 20, 0, Math.PI), glow('oven', 0xff6a1a, 1.3), 0, 0.3, 0.3); fire.userData.dyn = true;
-    var pz = cyl(g, 0.12, 0.12, 0.014, [col(0xd9a25a, 0.7), M('pizzaTop', { color: 0xffffff, map: pizzaTex(), roughness: 0.6 }), col(0xd9a25a, 0.7)], 0, 0.3, 0.33, 22);
+    var pzCr = col(0xd9a25a, 0.7).clone(), pzTop = M('pizzaTop', { color: 0xffffff, map: pizzaTex(), roughness: 0.6 }).clone();
+    var pz = cyl(g, 0.12, 0.12, 0.014, [pzCr, pzTop, pzCr], 0, 0.3, 0.33, 22);
     pz.userData.dyn = true;
     var fl = flames(g, [[-0.09, 0.33, 0.27, 0.035], [0, 0.34, 0.25, 0.045], [0.09, 0.33, 0.27, 0.035]], 'fire', 0xffa02a, 0.14);
     // chimney
     cyl(g, 0.065, 0.075, 0.24, br, 0.0, 0.76, -0.2, 14); cyl(g, 0.09, 0.09, 0.03, stone, 0, 0.89, -0.2, 14);
     cone(g, 0.1, 0.07, col(0x3a3d42, 0.5, 0.6), 0, 0.95, -0.2, 14);
+    var WHITE = new T.Color(0xffffff), CRUST = new T.Color(0xd9a25a), DOUGH = new T.Color(0xf3e4c8), CHAR = new T.Color(0x2a1c14);
     return function (dt, t, s) {
+      var h = s.h;
       fire.material.emissiveIntensity = (s.cooking ? 2.4 : 1.0) * (0.85 + 0.15 * Math.sin(t * 11));
       fl(t, s.cooking ? 1.1 : 0.55);
-      pz.position.z = s.cooking ? 0.27 : 0.335;
-      pz.rotation.y += dt * (s.cooking ? 1.5 : 0);
+      if (!h) {
+        pz.visible = true; pzTop.color.copy(WHITE); pzCr.color.copy(CRUST);
+        pz.position.z = s.cooking ? 0.27 : 0.335;
+        pz.rotation.y += dt * (s.cooking ? 1.5 : 0);
+        return;
+      }
+      // simulator: the pizza goes in, is turned half-way, comes out on the hearth
+      var u = h.cooking[0];
+      pz.visible = !!u;
+      if (!u) { pz.position.z = 0.345; return; }
+      pz.position.z += ((u.ph === 'fin' ? 0.345 : 0.25) - pz.position.z) * Math.min(1, dt * 8);
+      if (u.ph === 'burnt') { pzTop.color.copy(CHAR); pzCr.color.copy(CHAR); }
+      else { pzTop.color.copy(WHITE); pzCr.color.copy(DOUGH).lerp(CRUST, Math.min(1, u.t / u.total)); }
+      if (u.flip && !u._fl) { u._fl = 1; u._ft = 0.001; }
+      if (u._ft) { u._ft += dt; pz.rotation.y += dt * 9; if (u._ft > 0.35) u._ft = 0; }
     };
   };
 
@@ -421,17 +495,34 @@ var Models = (function () {
     });
     var soup = cyl(pot, 0.25, 0.25, 0.01, [col(0xc9521c, 0.4), M('soupTop', { color: 0xffffff, map: soupTex(), roughness: 0.6 }), col(0xc9521c, 0.4)], 0, 0.265, 0, 24);
     soup.userData.dyn = true;
-    var lad = grp(pot, 0.12, 0.3, -0.05); lad.rotation.z = -0.5; lad.rotation.y = 0.6;
+    var lad = grp(pot, 0.12, 0.3, -0.05, true); lad.rotation.z = -0.5; lad.rotation.y = 0.6;
     cyl(lad, 0.011, 0.011, 0.34, steel(), 0, 0.13, 0, 8); sph(lad, 0.014, steel(), 0, 0.3, 0);
     var r = rnd(31), bubbles = [];
     for (var i = 0; i < 7; i++) { var b = sph(pot, 0.022, col(0xf5a45a, 0.25), (r() - 0.5) * 0.34, 0.272, (r() - 0.5) * 0.34); b.userData.dyn = true; b.userData.ph = r() * 6; bubbles.push(b); }
+    var ladT = 0;
     return function (dt, t, s) {
-      fl(t, s.cooking ? 1.2 : 0.35);
-      soup.rotation.y += dt * (s.cooking ? 0.9 : 0.15);
+      var h = s.h, hot = s.cooking, full = true;
+      if (h) {                              // simulator: the pot is empty until a soup is started; each bowl lowers it
+        var u = h.cooking[0];
+        full = !!u; hot = !!u && u.ph !== 'fin';
+        if (u) {
+          soup.position.y = 0.265 - 0.05 * (u.fin || 0);
+          if (u._sf !== u.fin) { if (u.fin) ladT = 0.45; u._sf = u.fin; }
+        }
+        if (h._nu !== h.cooking.length) { if (h._nu > h.cooking.length) ladT = 0.45; h._nu = h.cooking.length; }
+      } else soup.position.y = 0.265;
+      soup.visible = full;
+      fl(t, hot ? 1.2 : 0.35);
+      soup.rotation.y += dt * (hot ? 0.9 : 0.15);
       for (var i = 0; i < bubbles.length; i++) {
-        var k = Math.max(0, Math.sin(t * (s.cooking ? 6 : 2) + bubbles[i].userData.ph)) * (s.cooking ? 1 : 0.45);
+        var k = full ? Math.max(0, Math.sin(t * (hot ? 6 : 2) + bubbles[i].userData.ph)) * (hot ? 1 : 0.45) : 0;
         bubbles[i].scale.setScalar(0.01 + k); bubbles[i].visible = k > 0.08;
+        bubbles[i].position.y = soup.position.y + 0.007;
       }
+      // the ladle dips in each time a bowl is filled
+      var q = ladT > 0 ? Math.sin(Math.PI * ladT / 0.45) : 0;
+      if (ladT > 0) ladT -= dt;
+      lad.position.y = 0.3 - q * 0.09; lad.rotation.z = -0.5 - q * 0.45;
     };
   };
 
@@ -450,8 +541,25 @@ var Models = (function () {
     for (i = 0; i < 5; i++) sph(food, 0.03, vg[0], (r() - 0.5) * 0.26, 0.07 + r() * 0.03, (r() - 0.5) * 0.26, 1.3, 0.35, 0.7);
     bake(food); food.userData.dyn = true; bake(w);
     return function (dt, t, s) {
-      fl(t, s.cooking ? 1.4 : 0.35);
-      var k = s.cooking ? 1 : 0;
+      var h = s.h, k = s.cooking ? 1 : 0, flame = s.cooking ? 1.4 : 0.35;
+      if (h) {                              // simulator: it only shakes a little... until the big toss
+        var u = h.cooking[0];
+        food.visible = !!u;
+        flame = u && u.ph !== 'fin' ? (u.ph === 'cook' ? 1.4 : 0.8) : 0.35;
+        k = u && u.ph === 'cook' ? 0.22 : 0;
+        if (u && u.flip && !u._fl) { u._fl = 1; u._ft = 0.001; }
+        if (u && u._ft) {
+          u._ft += dt; var q = Math.min(1, u._ft / 0.7), up = Math.sin(Math.PI * q);
+          fl(t, 1.9);
+          w.rotation.z = Math.sin(q * Math.PI * 2) * 0.2;
+          w.position.y = 0.222 + up * 0.06;
+          food.position.y = 0.05 + up * 0.17;
+          food.rotation.y += dt * 10;
+          if (q >= 1) u._ft = 0;
+          return;
+        }
+      } else food.visible = true;
+      fl(t, flame);
       w.rotation.z = Math.sin(t * 7.5) * 0.11 * k;
       w.position.y = 0.222 + Math.max(0, Math.sin(t * 7.5 + 0.6)) * 0.035 * k;
       food.position.y = 0.05 + Math.max(0, Math.sin(t * 7.5 - 0.5)) * 0.06 * k;
@@ -467,8 +575,17 @@ var Models = (function () {
     // rolling mat with a whole roll
     box(g, 0.3, 0.008, 0.24, M('mat', { color: 0xb9c58a, map: woodTex('bamboo', [1, 3]), roughness: 0.8 }), -0.3, 0.24, -0.1);
     var nori = col(0x16221b, 0.7), rice = col(0xfaf7ee, 0.8);
-    var roll = cyl(g, 0.04, 0.04, 0.26, nori, -0.3, 0.284, -0.1, 16); roll.rotation.z = Math.PI / 2;
-    cyl(g, 0.036, 0.036, 0.262, rice, -0.3, 0.284, -0.1, 12).rotation.z = Math.PI / 2;
+    var showRoll = grp(g, -0.3, 0.284, -0.1, true);          // a whole roll on the mat (manager's view)
+    cyl(showRoll, 0.04, 0.04, 0.26, nori, 0, 0, 0, 16).rotation.z = Math.PI / 2;
+    cyl(showRoll, 0.036, 0.036, 0.262, rice, 0, 0, 0, 12).rotation.z = Math.PI / 2;
+    // simulator: the roll being made: seaweed and rice, then the fish, then rolled
+    var hs = grp(g, -0.3, 0.246, -0.1, true);
+    var hNori = box(hs, 0.26, 0.004, 0.2, nori, 0, 0.002, 0), hRice = box(hs, 0.24, 0.012, 0.17, rice, 0, 0.011, 0);
+    var hFish = box(hs, 0.24, 0.016, 0.045, col(0xff8a65, 0.45), 0, 0.025, 0);
+    var hRoll = grp(hs, 0, 0.04, 0);
+    cyl(hRoll, 0.04, 0.04, 0.26, nori, 0, 0, 0, 16).rotation.z = Math.PI / 2;
+    cyl(hRoll, 0.036, 0.036, 0.262, rice, 0, 0, 0, 12).rotation.z = Math.PI / 2;
+    hs.visible = false;
     // cut makis
     var cols = ['#ff8a65', '#e53935', '#ff8a65', '#ffb300', '#e53935'];
     cols.forEach(function (c, k) {
@@ -495,8 +612,19 @@ var Models = (function () {
     var kn = grp(g, -0.2, 0.25, 0.06, true);
     box(kn, 0.24, 0.045, 0.006, steel(), 0.08, 0.022, 0); box(kn, 0.11, 0.03, 0.02, black(), -0.095, 0.022, 0, 0.008);
     kn.rotation.y = 0.2;
+    var chopT = 0;
     return function (dt, t, s) {
-      var k = s.cooking ? 1 : 0, c = Math.abs(Math.sin(t * 9));
+      var k = s.cooking ? 1 : 0, c = Math.abs(Math.sin(t * 9)), h = s.h;
+      showRoll.visible = !h;
+      if (h) {
+        var u = h.cooking[0], f = u ? (u.fin || 0) : 0;
+        hs.visible = !!u;
+        hNori.visible = hRice.visible = f < 2; hFish.visible = f === 1; hRoll.visible = f >= 2;
+        // the knife chops when a roll leaves the mat (it has just been cut)
+        if (h._nu !== h.cooking.length) { if (h._nu > h.cooking.length) chopT = 0.55; h._nu = h.cooking.length; }
+        k = chopT > 0 ? 1 : 0;
+        if (chopT > 0) chopT -= dt;
+      } else hs.visible = false;
       kn.rotation.z = k * (0.5 - c * 0.5);
       kn.position.y = 0.25 + k * (0.06 - c * 0.06);
       kn.position.x = -0.2 + k * Math.sin(t * 1.2) * 0.04;
@@ -525,10 +653,12 @@ var Models = (function () {
     // cake on a stand
     var ck = grp(g, 0.25, 0.3, -0.1);
     lathe(ck, [[0, 0], [0.09, 0], [0.085, 0.012], [0.02, 0.03], [0.02, 0.1], [0.19, 0.12], [0.19, 0.132], [0, 0.132]], white, 0, 0, 0, 28);
-    cyl(ck, 0.15, 0.15, 0.13, col(0xfff3e0, 0.6), 0, 0.2, 0, 28);
-    cyl(ck, 0.153, 0.153, 0.02, col(0xd32f2f, 0.35), 0, 0.266, 0, 28);
-    for (i = 0; i < 8; i++) { var a = i / 8 * 6.283; sph(ck, 0.022, white, Math.cos(a) * 0.115, 0.285, Math.sin(a) * 0.115); sph(ck, 0.018, col(0xc62828, 0.35), Math.cos(a) * 0.115, 0.31, Math.sin(a) * 0.115, 1, 1.15, 1); }
-    for (i = 0; i < 12; i++) { a = i / 12 * 6.283; sph(ck, 0.02, col(0xd32f2f, 0.35), Math.cos(a) * 0.152, 0.245 - (i % 3) * 0.012, Math.sin(a) * 0.152, 1, 1.6 + (i % 2) * 0.8, 0.6); }
+    var cake = grp(ck, 0, 0, 0);                              // the cake itself (the stand is empty until it is built, in the simulator)
+    cyl(cake, 0.15, 0.15, 0.13, col(0xfff3e0, 0.6), 0, 0.2, 0, 28);
+    cyl(cake, 0.153, 0.153, 0.02, col(0xd32f2f, 0.35), 0, 0.266, 0, 28);
+    for (i = 0; i < 8; i++) { var a = i / 8 * 6.283; sph(cake, 0.022, white, Math.cos(a) * 0.115, 0.285, Math.sin(a) * 0.115); sph(cake, 0.018, col(0xc62828, 0.35), Math.cos(a) * 0.115, 0.31, Math.sin(a) * 0.115, 1, 1.15, 1); }
+    for (i = 0; i < 12; i++) { a = i / 12 * 6.283; sph(cake, 0.02, col(0xd32f2f, 0.35), Math.cos(a) * 0.152, 0.245 - (i % 3) * 0.012, Math.sin(a) * 0.152, 1, 1.6 + (i % 2) * 0.8, 0.6); }
+    bake(cake); cake.userData.dyn = true;
     // cupcakes
     [[0.06, 0.15, 0xf48fb1], [0.2, 0.19, 0x8d5a3b], [0.34, 0.15, 0xfff3e0]].forEach(function (c) {
       var cc = grp(g, c[0], 0.3, c[1]);
@@ -537,9 +667,15 @@ var Models = (function () {
       sph(cc, 0.014, col(0xc62828, 0.3), 0, 0.132, 0);
     });
     return function (dt, t, s) {
-      whisk.rotation.y += dt * (s.cooking ? 26 : 0);
-      head.rotation.z = s.cooking ? Math.sin(t * 50) * 0.01 : 0;
-      head.position.y = 0.3 + (s.cooking ? Math.sin(t * 44) * 0.002 : 0);
+      var h = s.h, run = s.cooking;
+      if (h) {                              // simulator: the batter is whisked, then the cake is built on the stand
+        var on = false; run = false;
+        for (var i = 0; i < h.cooking.length; i++) { var u = h.cooking[i]; if (u.ph === 'cook') run = true; if (u.ph === 'fin') on = true; }
+        cake.visible = on;
+      } else cake.visible = true;
+      whisk.rotation.y += dt * (run ? 26 : 0);
+      head.rotation.z = run ? Math.sin(t * 50) * 0.01 : 0;
+      head.position.y = 0.3 + (run ? Math.sin(t * 44) * 0.002 : 0);
     };
   };
 
@@ -668,6 +804,15 @@ var Models = (function () {
     return { group: g, tick: tick || function () { } };
   }
 
+  function hand(g, thumb) {
+    var skin = col(0xe8b48e, 0.62), sleeve = col(0xf4f1ea, 0.92);
+    sph(g, 0.06, skin, 0, 0, 0, 1.0, 0.5, 1.25);
+    var th = sph(g, 0.022, skin, thumb * 0.055, 0.008, -0.03, 1, 0.8, 1.9); th.rotation.y = -thumb * 0.5;
+    [-0.036, -0.012, 0.012, 0.036].forEach(function (x, k) { sph(g, 0.0155, skin, x, -0.004, -0.088 + Math.abs(k - 1.5) * 0.009, 1, 0.8, 2.3); });
+    var arm = add(g, new T.CapsuleGeometry(0.05, 0.5, 4, 12), sleeve, 0, 0, 0.37); arm.rotation.x = Math.PI / 2;
+    cyl(g, 0.058, 0.058, 0.05, sleeve, 0, 0, 0.09, 14).rotation.x = Math.PI / 2;
+  }
+
   // ---------------- small props for the restaurant ----------------
   var PROPS = {
     lockbox: function (g) {             // a station that is not bought yet: a closed crate with a padlock
@@ -748,6 +893,10 @@ var Models = (function () {
       cyl(g, 0.235, 0.25, 0.2, col(0x24252b, 0.7), 0, 1.16, 0, 20); // waistcoat
       torus(g, 0.255, 0.016, col(0xfafafa, 0.8), 0, 1.07, 0).rotation.x = Math.PI / 2;
     },
+    // the player's forearms (first person): white sleeve, bare hand. Origin = the palm; the arm goes
+    // towards +z (the player), the fingers towards -z.
+    handL: function (g) { hand(g, 1); },
+    handR: function (g) { hand(g, -1); },
     tray: function (g) {                // the tray carried by the player (first person)
       box(g, 1.0, 0.03, 0.5, wood('mid', [2, 1]), 0, 0, 0, 0.012);
       [-0.24, 0.24].forEach(function (z) { box(g, 1.0, 0.05, 0.03, wood('dark', [2, 1]), 0, 0.03, z, 0.012); });

@@ -112,7 +112,7 @@ var Daily = (function () {
   function onDayEnd(sh, res) {
     var s = SV();
     s.stats.bestDay = Math.max(s.stats.bestDay || 0, Math.round(sh.earned));
-    if (sh.manual) s.stats.sim = (s.stats.sim || 0) + 1;
+    if (sh.manual) { s.stats.sim = (s.stats.sim || 0) + 1; s.stats.simH = (s.stats.simH || 0) + 1; }     // simH: days cooked by hand (2.1)
     addProg('serve', sh.served); addProg('earn', Math.round(sh.earned)); addProg('tips', Math.round(sh.tips));
     addProg('stars', sh.stars); addProg('days', 1);
     if (sh.stars >= 3) addProg('three', 1);

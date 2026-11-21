@@ -166,9 +166,10 @@ var UI = (function () {
 
   // ---------------- pause ----------------
   function pause(sh) {
-    var md = modal(660, { onBack: function () { md.close(); } });
+    var dy = sh.manual ? 84 : 0;             // simulator: one more row (help, advice on / off)
+    var md = modal(660 + dy, { onBack: function () { md.close(); } });
     var I = md.inner;
-    board(I, 80, 70, 560, 540, 'b-a');
+    board(I, 80, 70, 560, 540 + dy, 'b-a');
     leaf(I, 0, 'PAUSE');
     var pp = paper(I, 130, 170, 460, 250, 'p-a');
     txt(I, 130, 196, 460, '<span class="lg" style="font-size:34px;color:#6b3a14">' + (sh.challenge ? 'DÉFI DU JOUR' : 'JOUR ' + sh.day) + '</span><br>' +
@@ -179,12 +180,18 @@ var UI = (function () {
     var sb = sq(I, 408, 330, 74, App.save.settings.sfx > 0 ? 'b_misic' : 'b_music_off', function () {
       App.save.settings.sfx = App.save.settings.sfx > 0 ? 0 : 0.8; applySettings(); sb.style.backgroundImage = 'var(--a-' + (App.save.settings.sfx > 0 ? 'b_misic' : 'b_music_off') + ')';
     });
-    sq(I, 150, 452, 100, 'b_restart', function () {
+    if (sh.manual) {
+      var hb = pill(I, 124, 418, 196, 66, 'AIDE', function () { simHelp(function () { }); });
+      var lab = function () { return 'CONSEILS : ' + (Fps.coachOn() ? 'OUI' : 'NON'); };
+      var cb = pill(I, 332, 418, 264, 66, lab(), function () { App.save.settings.coach = !Fps.coachOn(); Store.save(App.save); cb.innerHTML = lab(); });
+      hb.style.fontSize = cb.style.fontSize = '21px';
+    }
+    sq(I, 150, 452 + dy, 100, 'b_restart', function () {
       if (sh.challenge) confirm('RECOMMENCER ?', 'Recommencer le défi du jour ?<br>Cet essai ne comptera pas.', function () { md.close(); Game.startDefi(); });
       else confirm('RECOMMENCER ?', 'Recommencer le jour ' + sh.day + ' ?<br>Les pièces déjà gagnées sont gardées.', function () { md.close(); Game.startDay(sh.day, { sim: sh.manual }); });
     });
-    sq(I, 300, 440, 124, 'b_play', function () { md.close(); });
-    sq(I, 470, 452, 100, 'b_menu', function () { confirm('QUITTER ?', sh.challenge ? 'Arrêter le défi et revenir à ta cuisine ?<br>Cet essai ne comptera pas.' : 'Fermer le restaurant et revenir à la cuisine ?<br>Le jour ne sera pas validé.', function () { md.close(); Game.quitShift(); }); });
+    sq(I, 300, 440 + dy, 124, 'b_play', function () { md.close(); });
+    sq(I, 470, 452 + dy, 100, 'b_menu', function () { confirm('QUITTER ?', sh.challenge ? 'Arrêter le défi et revenir à ta cuisine ?<br>Cet essai ne comptera pas.' : 'Fermer le restaurant et revenir à la cuisine ?<br>Le jour ne sera pas validé.', function () { md.close(); Game.quitShift(); }); });
     return md;
   }
 
@@ -205,7 +212,7 @@ var UI = (function () {
     var lines = '';
     lines += '<div class="lg" style="font-size:32px;color:#6b3a14;margin-bottom:6px">JOUR ' + sh.day + (win ? ' RÉUSSI !' : '') + '</div>';
     lines += 'Gains : <b>' + fmt(sh.earned) + '</b> ' + COIN() + ' <span style="opacity:.75">(objectif ' + fmt(sh.goal) + ')</span><br>';
-    lines += 'Clients servis : <b>' + sh.served + '</b>' + (sh.lost ? ' • partis fâchés : <b>' + sh.lost + '</b>' : '') + '<br>';
+    lines += 'Clients servis : <b>' + sh.served + '</b>' + (sh.lost ? ' • partis fâchés : <b>' + sh.lost + '</b>' : sh.burnt ? ' • plats brûlés : <b>' + sh.burnt + '</b>' : '') + '<br>';
     if (sh.tips) lines += 'Pourboires : <b>' + fmt(sh.tips) + '</b> ' + COIN() + (sh.vips ? ' • VIP : <b>' + sh.vips + '</b>' : '') + '<br>';
     lines += 'Expérience : <b>+' + res.xpGain + ' XP</b>';
     if (res.bonus) lines += '<br>Bonus étoiles : <b>+' + fmt(res.bonus) + '</b> ' + COIN();
@@ -568,7 +575,7 @@ var UI = (function () {
       [ASSETS.chef_happy, 'Entre deux journées, <b>améliore</b> tes stations, embauche, décore et investis : deviens un vrai Tycoon !'],
       [Art.book(), 'Ouvre le <b>Carnet</b> pour suivre l\'histoire du restaurant. Sers souvent tes <b>habitués</b> pour découvrir leurs histoires.']
     ];
-    steps.push([Art.icon('walk'), 'Mode <b>Simulateur</b> : choisis « Vue simulateur » dans la cuisine pour marcher, cuisiner et servir toi-même.']);
+    steps.push([Art.icon('walk'), 'Mode <b>Simulateur</b> : choisis « Vue simulateur » dans la cuisine. Tu prends les commandes, tu cuisines chaque plat geste par geste et tu sers toi-même.']);
     steps.push([Art.icon('trophy'), '<b>Club des chefs</b> : classement mondial, défi du jour, missions, cadeau quotidien et codes cadeaux.']);
     var kb = document.getElementById('app').classList.contains('keys');
     if (kb) steps.push([keyIcon(), 'Au <b>clavier</b> : <b>1</b> à <b>8</b> pour cuisiner, <b>A Z E R</b> pour les bonus, <b>Espace</b> pour la pause, <b>V</b> la vue, <b>K</b> le club.']);
@@ -685,25 +692,30 @@ var UI = (function () {
   // first day in the simulator: how to play
   function simHelp(done) {
     var touch = (('ontouchstart' in window) || navigator.maxTouchPoints > 0) && !(window.matchMedia && matchMedia('(pointer: fine)').matches);
-    var md = modal(900, { closable: false, onBack: function () { md.close(done); } });
+    var md = modal(980, { closable: false, onBack: function () { md.close(done); } });
     var I = md.inner;
-    board(I, 40, 80, 640, 790);
-    leaf(I, 6, 'SIMULATEUR', true);
-    paper(I, 76, 178, 568, 560);
+    board(I, 40, 60, 640, 880);
+    leaf(I, -14, 'SIMULATEUR', true);
+    paper(I, 76, 156, 568, 660);
     var rows = touch ? [
-      ['Marcher', 'Pose ton pouce gauche en bas de l’écran et glisse.'],
-      ['Regarder', 'Glisse un doigt ailleurs sur l’écran.'],
-      ['Agir', 'Vise une station ou un client, puis touche le gros bouton.']
+      ['Marcher', 'pouce gauche en bas de l’écran, et glisse.'],
+      ['Regarder', 'glisse un doigt ailleurs sur l’écran.'],
+      ['Agir', 'vise, puis touche le gros bouton.']
     ] : [
-      ['Marcher', 'Touches <b>Z Q S D</b> ou les flèches. <b>Maj</b> pour courir.'],
-      ['Regarder', 'Bouge la souris. <b>Échap</b> met en pause et libère la souris.'],
-      ['Agir', 'Vise une station ou un client, puis <b>clique</b> (ou touche <b>E</b>).']
+      ['Marcher', 'touches <b>Z Q S D</b> ou flèches (<b>Maj</b> : courir).'],
+      ['Regarder', 'la souris (<b>Échap</b> : pause).'],
+      ['Agir', 'vise, puis <b>clique</b> ou touche <b>E</b>.']
     ];
-    var h = '<div class="lg" style="font-size:27px;color:#6b3a14;margin-bottom:10px">Tu es dans la cuisine !</div>';
-    rows.forEach(function (r) { h += '<div style="margin:0 0 9px"><b class="lg" style="font-size:22px;color:#2f8a17">' + r[0] + '</b><br>' + r[1] + '</div>'; });
-    h += '<div style="margin-top:12px;border-top:3px dashed rgba(107,58,20,.3);padding-top:12px"><b>1.</b> Vise une station : <b>Cuire</b>.<br><b>2.</b> Quand c’est prêt : <b>Prendre</b> (3 plats dans les mains au plus).<br><b>3.</b> Va au comptoir, vise le client : <b>Servir</b>.<br><span style="font-size:19px;opacity:.85">Les commandes en attente sont affichées à gauche. Les objectifs sont plus bas qu’en vue gérant.</span></div>';
-    var t = txt(I, 106, 204, 508, h, 'ptxt', 22); t.style.textAlign = 'left'; t.style.lineHeight = '1.26';
-    pill(I, 215, 756, 290, 92, 'C’EST PARTI !', function () { md.close(done); });
+    var h = '<div class="lg" style="font-size:27px;color:#6b3a14;margin-bottom:8px">Tu es dans la cuisine !</div>';
+    rows.forEach(function (r) { h += '<div style="margin:0 0 5px"><b class="lg" style="font-size:21px;color:#2f8a17">' + r[0] + '</b> : ' + r[1] + '</div>'; });
+    h += '<div style="margin-top:10px;border-top:3px dashed rgba(107,58,20,.3);padding-top:10px">' +
+      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">1. La commande</b><br>Va au comptoir et vise le client qui a un « ? ».</div>' +
+      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">2. La cuisine</b><br>Chaque station a ses gestes : poser le steak, le retourner, monter le burger… Le message au milieu de l’écran te dit quoi faire.</div>' +
+      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">3. Le service</b><br>Prends les plats (3 au plus) et apporte-les au client.</div>' +
+      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">4. Le reste</b><br>Station vide ? Une caisse t’attend au <b>frigo</b>. Des miettes ? Essuie le comptoir.</div>' +
+      '<span style="font-size:18px;opacity:.85">Les premiers jours, un conseil s’affiche en haut de l’écran.' + (App.save.mode === 'classique' ? ' En Classique, ce qui reste sur le feu brûle !' : '') + '</span></div>';
+    var t = txt(I, 104, 180, 512, h, 'ptxt', 20); t.style.textAlign = 'left'; t.style.lineHeight = '1.22';
+    pill(I, 215, 838, 290, 92, 'C’EST PARTI !', function () { md.close(done); });
     Sfx.play('soft');
   }
   // who made what

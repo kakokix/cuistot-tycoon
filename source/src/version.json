@@ -1,9 +1,13 @@
 {
-  "version": "2.0.1",
-  "label": "2.0.1",
-  "build": 7,
+  "version": "2.1.0",
+  "label": "2.1",
+  "build": 8,
   "notes": [
-    "<b>Correction</b> : sur téléphone, les stations disparaissaient de la cuisine après une journée en Simulateur",
-    "Rappel de la 2.0 : mode Simulateur, Club des chefs, codes cadeaux, classement mondial"
+    "<b>Simulateur à la main</b> : prends la commande du client",
+    "Steak à retourner, burger à monter, frites à égoutter…",
+    "En Classique, ce qu’on oublie sur le feu <b>brûle</b> !",
+    "Frigo à ingrédients, comptoir à essuyer, coup de feu",
+    "Tes mains, les plats sur le passe, les bruits de cuisine",
+    "Journées plus longues, conseils, 3 nouveaux succès"
   ]
 }

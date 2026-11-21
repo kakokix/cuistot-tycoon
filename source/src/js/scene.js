@@ -5,6 +5,9 @@ var Scene = (function () {
   var shownCoins = 0;
   var YUM = ['Délicieux !', 'Miam !', 'Parfait !', 'Trop bon !', 'Un régal !', 'Merci chef !', 'Super !'];
   var GRR = ['Trop long !', 'Je m\'en vais !', 'Inadmissible !', 'Plus jamais !', 'Quelle attente !'];
+  var HELLO = ['Bonjour !', 'Salut chef !', 'J’ai faim !', 'Bonjour, s’il vous plaît…', 'Coucou !'];
+  // the noise of each finishing gesture in the simulator (station id + step number, or the station alone)
+  var STEP_SND = { jus: 'pour', soupe: 'pour', frites0: 'splash', pizza1: 'chop', sushi2: 'chop', gateau1: 'chop', gateau2: 'chop', wok: 'pour' };
   function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
   var COLW = 164, COLG = 10, COL0 = 16, ROWH = 168;
   var BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';   // <img> drawn with a CSS background
@@ -319,7 +322,7 @@ var Scene = (function () {
       var owned = lv > 0;
       var cls = 'station' + (owned ? '' : (s.level >= def.unlock ? ' empty' : ' locked'));
       if (mode === 'hub' && owned && lv < GD.MAX_ST_LEVEL && s.coins >= GD.upgradeCost(def, lv)) cls += ' can-up';
-      o.el.className = cls;
+      o.el.className = cls + (o.hands ? ' hands' : '');
       o.lv.style.display = owned ? 'flex' : 'none';
       o.lv.textContent = lv;
       o.nm.style.display = owned ? 'flex' : 'none';
@@ -390,9 +393,14 @@ var Scene = (function () {
     // clear customers
     Object.keys(CU).forEach(function (id) { CU[id].el.remove(); delete CU[id]; });
     E.fx.innerHTML = '';
-    root.classList.remove('turbo');
+    root.classList.remove('turbo'); root.classList.remove('rush');
     refreshDecor(); refreshStations(); refreshHud();
-    for (var i = 0; i < 8; i++) { ST[i].ready.innerHTML = ''; ST[i].nReady = 0; ST[i].el.classList.remove('cooking'); }
+    for (var i = 0; i < 8; i++) {
+      var o8 = ST[i];
+      o8.ready.innerHTML = ''; o8.nReady = 0; o8.el.classList.remove('cooking');
+      if (o8.units) { o8.units.remove(); o8.stock.remove(); o8.units = null; }      // gauges of the simulator
+      o8.hands = false;
+    }
     Object.keys(CH).forEach(function (k) { var o = CH[k]; o.x = o.x0; o.path = []; o.work = 0; setCharMood(o, 'happy'); o.el.style.left = px(o.x - o.w / 2); o.el.className = 'chr'; });
     E.goal.classList.toggle('relax', !!(sh && sh.relax));
     E.hearts.style.display = sh && sh.relax ? 'none' : 'flex';
@@ -482,6 +490,16 @@ var Scene = (function () {
       if (u.y < target) u.y = Math.min(target, u.y + sp * dt); else if (u.y > target) u.y = Math.max(target, u.y - sp * dt);
       u.body.style.transform = 'translateY(' + px(u.y) + ')';
       if (u.op !== op) { u.op = op; u.el.style.opacity = op.toFixed(2); }
+      // simulator: "?" until somebody takes the order
+      if (c.state === 'ask' && !u.ask) {
+        u.ask = el('div', 'bubble ask', u.el, '<div class="q">?</div><div class="pat"><i></i></div>');
+        u.askPat = u.ask.querySelector('.pat i');
+        bumpCls(u.el, 'bounce');
+      }
+      if (u.ask) {
+        if (c.state !== 'ask') { u.ask.remove(); u.ask = null; }
+        else { var ra = Math.max(0, c.patience / c.maxPatience); u.askPat.style.width = px(3 + (128 - 6) * ra); u.askPat.className = ra < 0.3 ? 'low' : ra < 0.6 ? 'mid' : ''; }
+      }
       if (c.state === 'wait' && !u.bub) { showBubble(u); bumpCls(u.el, 'bounce'); }
       if (u.bub) {
         if (c.state === 'out') { u.bub.remove(); u.bub = null; }
@@ -504,11 +522,32 @@ var Scene = (function () {
   }
 
   // ---------------- stations (shift) ----------------
+  // simulator: one small gauge per thing on the fire (what it needs is written on it) and the stock left
+  var UNIT_IC = { cook: '', mid: '↻', done: '✓', fin: '', burnt: '✖' };
+  function updateUnits(o, s) {
+    if (!o.units) { o.units = el('div', 'units', o.el); o.stock = el('div', 'stock', o.el); o.uc = []; o.stockV = -1; }
+    var n = s.cooking.length, nf = s.hd.fin.length, k;
+    while (o.uc.length < n) { var e = el('div', 'unit', o.units, '<i></i><b></b>'); o.uc.push({ el: e, bar: e.firstChild, ic: e.lastChild, cls: '', txt: '', w: -1 }); }
+    while (o.uc.length > n) o.uc.pop().el.remove();
+    for (k = 0; k < n; k++) {
+      var u = s.cooking[k], c = o.uc[k], pct = u.ph === 'cook' || u.ph === 'mid' ? u.t / u.total : 1;
+      var cls = 'unit ' + u.ph, txt = u.ph === 'fin' ? u.fin + '/' + nf : UNIT_IC[u.ph];
+      if (u.ph === 'done' && s.hd.burn && !sh.relax && u.by !== 'commis' && u.w > GD.SIM.burnDone * 0.5) cls += ' hot';
+      if (u.ph === 'mid' && s.hd.burn && !sh.relax && u.by !== 'commis' && u.w > GD.SIM.burnMid * 0.5) cls += ' hot';
+      if (c.cls !== cls) { c.cls = cls; c.el.className = cls; }
+      if (c.txt !== txt) { c.txt = txt; c.ic.textContent = txt; }
+      var w = Math.round(Math.min(1, pct) * 100);
+      if (c.w !== w) { c.w = w; c.bar.style.width = w + '%'; }
+    }
+    if (o.stockV !== s.stock) { o.stockV = s.stock; o.stock.textContent = '×' + s.stock; o.stock.className = 'stock' + (s.stock <= 0 ? ' empty' : s.stock <= 2 ? ' low' : ''); }
+  }
   function updateStations() {
     for (var i = 0; i < 8; i++) {
       var o = ST[i], s = sh.stations[i];
+      if (o.hands !== !!sh.manual) { o.hands = !!sh.manual; o.el.classList.toggle('hands', o.hands); if (!o.hands && o.units) { o.units.remove(); o.stock.remove(); o.units = null; } }
       if (!s.owned) continue;
       var ck = s.cooking.length;
+      if (sh.manual) updateUnits(o, s);
       o.el.classList.toggle('cooking', ck > 0);
       if (ck > 0) {
         o.prog[1].style.width = px(3 + 114 * Math.min(1, s.cooking[0].t / s.cooking[0].total));
@@ -682,7 +721,46 @@ var Scene = (function () {
             if (!App.save.seenTuto.vip) { App.save.seenTuto.vip = 1; UI.toast('La critique paie le double : sers-la vite !'); }
           }
           break;
-        case 'order': Tuto.onAction('order', e.c); break;
+        case 'order':
+          Tuto.onAction('order', e.c);
+          if (e.by) {                       // simulator: somebody took the order
+            Sfx.play('order');
+            p = custPos(e.c);
+            if (!p.hidden) ftext(p.x, p.y - 150, e.by === 'serveur' ? 'C’est noté !' : pick(HELLO), 'say');
+            if (e.by === 'serveur') goTo(CH.waiter, seatStaffX(e.c), null);
+          }
+          break;
+        case 'ask': Sfx.play('bell'); break;
+        case 'dirty': p = custPos(e.c); if (!p.hidden) ftext(p.x, p.y - 150, 'Oh… c’est sale ici.', 'say'); break;
+        case 'mid': if (e.u.by !== 'commis') Sfx.play('tick'); break;
+        case 'flip': Sfx.play('flip'); if (e.by === 'commis') goTo(CH.commis, stStaffX(e.st.i), null); break;
+        case 'cooked': if (e.u.by !== 'commis') Sfx.play('cooked'); break;
+        case 'step':
+          Sfx.play(STEP_SND[e.st.def.id + e.step] || STEP_SND[e.st.def.id] || 'stack');
+          if (e.by === 'commis') goTo(CH.commis, stStaffX(e.st.i), null);
+          break;
+        case 'burnt': {
+          Sfx.play('burnt'); Vib.buzz(60);
+          var sb = stationCenter(e.st.i);
+          if (ST[e.st.i].vis !== false) ftext(sb.x, sb.top - 20, 'Brûlé !', 'say');
+          if (!App.save.seenTuto.burnt) { App.save.seenTuto.burnt = 1; UI.toast('C’est brûlé ! Jette-le et recommence (en Détente, rien ne brûle).'); }
+          break;
+        }
+        case 'trash': Sfx.play('trash'); break;
+        case 'restock': {
+          Sfx.play('restock');
+          var sr = stationCenter(e.st.i);
+          if (ST[e.st.i].vis !== false) ftext(sr.x, sr.top - 20, 'Stock plein !', 'say');
+          if (e.by === 'commis') { goTo(CH.commis, stStaffX(e.st.i), null); CH.commis.work = 0.6; }
+          break;
+        }
+        case 'wipe': Sfx.play('wipe'); break;
+        case 'rush':
+          if (e.on) { Sfx.play('bell'); UI.toast('Coup de feu ! Les clients arrivent plus vite pendant un moment.'); }
+          else UI.toast('Le coup de feu est passé. Ouf !');
+          Sfx.setTempo((sh.relax ? 104 : 116) + (e.on ? 14 : 0));
+          root.classList.toggle('rush', !!e.on);
+          break;
         case 'cook': {
           var who = e.by === 'commis' ? CH.commis : CH.chef;
           goTo(who, stStaffX(e.st.i), null); who.work = 0.6; setCharMood(who, 'focus'); who.moodT = 0.7;

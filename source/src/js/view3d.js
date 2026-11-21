@@ -139,6 +139,23 @@ var View3D = (function () {
   function dotTex() { return texCache._dot || (texCache._dot = radialTex([[0, 'rgba(255,255,255,1)'], [0.35, 'rgba(255,255,255,.85)'], [1, 'rgba(255,255,255,0)']])); }
   function softTex() { return texCache._soft || (texCache._soft = radialTex([[0, 'rgba(255,255,255,.9)'], [0.5, 'rgba(255,255,255,.4)'], [1, 'rgba(255,255,255,0)']])); }
   function blobTex() { return texCache._blob || (texCache._blob = radialTex([[0, 'rgba(0,0,0,.75)'], [0.55, 'rgba(0,0,0,.45)'], [1, 'rgba(0,0,0,0)']])); }
+  // crumbs and a ketchup stain left on the counter (simulator)
+  function crumbTex() {
+    if (texCache._crumb) return texCache._crumb;
+    var c = document.createElement('canvas'); c.width = 128; c.height = 88;
+    var g = c.getContext('2d'), r = 7;
+    function rn() { r = (r * 16807) % 2147483647; return (r & 0xffff) / 0xffff; }
+    g.fillStyle = 'rgba(96,56,22,.22)'; g.beginPath(); g.ellipse(60, 46, 46, 26, 0.2, 0, 6.3); g.fill();
+    g.fillStyle = 'rgba(196,48,34,.62)'; g.beginPath(); g.ellipse(88, 40, 12, 7, 0.5, 0, 6.3); g.fill();
+    g.beginPath(); g.ellipse(74, 52, 4, 3, 0, 0, 6.3); g.fill();
+    for (var i = 0; i < 28; i++) {
+      g.fillStyle = ['#c98a3c', '#e2b266', '#8a5a2a', '#f1d59a'][i % 4];
+      var x = 14 + rn() * 100, y = 12 + rn() * 64, q = 2 + rn() * 4;
+      g.beginPath(); g.ellipse(x, y, q, q * 0.7, rn() * 3, 0, 6.3); g.fill();
+    }
+    var t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace;
+    return (texCache._crumb = t);
+  }
   function signTex(text) {
     var c = document.createElement('canvas'); c.width = 640; c.height = 200;
     var g = c.getContext('2d'), im = window.__img && window.__img.board_c;
@@ -215,6 +232,14 @@ var View3D = (function () {
     g.add(mesh(new T.BoxGeometry(34.4, 0.07, 1.34), std(0x6b3a1c), 0, COUNTER_TOP - 0.1, 0, false));
     g.add(mesh(new T.BoxGeometry(34.2, 0.1, 1.06), std(0x5a3418), 0, 0.05, 0, false));          // plinth
     M.counter = g; scene.add(g);
+    // simulator: what some customers leave on the counter (one spot per place)
+    M.dirt = [];
+    var dirtM = new T.MeshBasicMaterial({ map: crumbTex(), transparent: true, depthWrite: false });
+    for (var dq = 0; dq < 6; dq++) {
+      var dd = new T.Mesh(new T.PlaneGeometry(0.66, 0.45), dirtM);
+      dd.rotation.x = -Math.PI / 2; dd.position.set(0, COUNTER_TOP + 0.075, 0.13); dd.visible = false; dd.renderOrder = 2;
+      scene.add(dd); M.dirt.push(dd);
+    }
 
     // wide only: the worktop in the foreground and the 8 stations standing on it
     var wg = new T.Group();
@@ -363,6 +388,18 @@ var View3D = (function () {
     tr.rotation.x = 0.46; tr.visible = false;
     M.tray = tr; M.trayK = 0; M.dishCache = {};
     M.trayScene.add(tr);
+    // ... or a crate of ingredients fetched in the fridge
+    M.handCrate = Models.prop('crate');
+    M.handCrate.traverse(function (o) { if (o.isMesh) o.castShadow = o.receiveShadow = false; });
+    M.handCrate.visible = false; M.crateK = 0;
+    M.trayScene.add(M.handCrate);
+    // the player's hands: they hold the tray or the crate, and the right one reaches out at each gesture
+    M.hands = ['handL', 'handR'].map(function (id) {
+      var hd = Models.prop(id);
+      hd.traverse(function (o) { if (o.isMesh) o.castShadow = o.receiveShadow = false; });
+      hd.visible = false; M.trayScene.add(hd);
+      return hd;
+    });
   }
   // a dish for the tray: a small 3D model, or its picture when there is no model
   function trayDish(id) {
@@ -397,6 +434,14 @@ var View3D = (function () {
   // the tray comes up when the player carries something
   function syncTray(fp, dt) {
     if (!M.tray) return;
+    var cr = !!(fp && fp.crate);
+    M.crateK += ((cr ? 1 : 0) - M.crateK) * Math.min(1, dt * 9);
+    M.handCrate.visible = !!fp && M.crateK > 0.02;
+    if (M.handCrate.visible) {
+      M.handCrate.scale.setScalar(App.wide ? 1.15 : 0.8);
+      M.handCrate.position.set(0, (App.wide ? -0.74 : -0.72) - (1 - M.crateK) * 0.6 + (fp.bob || 0) * 0.6, -1.75);
+      M.handCrate.rotation.set(0.3, 0.25, 0);
+    }
     var n = fp && fp.carry ? fp.carry.length : 0;
     M.trayK += ((n ? 1 : 0) - M.trayK) * Math.min(1, dt * 9);
     M.tray.visible = !!fp && M.trayK > 0.02;
@@ -414,8 +459,25 @@ var View3D = (function () {
       h.position.set((i - (n - 1) / 2) * 0.32, 0.02, 0);
     }
   }
+  function syncHands(fp) {
+    if (!M.hands) return;
+    var hk = App.wide ? 1 : 0.7, t0 = fp && fp.actT != null ? fp.actT : 9, bump = t0 < 0.3 ? Math.sin(Math.PI * t0 / 0.3) : 0;
+    var holding = !fp ? 0 : M.tray.visible ? 1 : M.handCrate.visible ? 2 : 0;
+    for (var i = 0; i < 2; i++) {
+      var hd = M.hands[i], sd = i ? 1 : -1, show = !!fp && (holding > 0 || (i === 1 && bump > 0.02));
+      hd.visible = show;
+      if (!show) continue;
+      var x, y, z;
+      if (holding === 1) { x = sd * (0.5 * M.tray.scale.x + 0.03 * hk); y = M.tray.position.y + 0.012; z = M.tray.position.z + 0.03; }
+      else if (holding === 2) { var cs = M.handCrate.scale.x; x = sd * (0.27 * cs + 0.03 * hk); y = M.handCrate.position.y + 0.24 * cs; z = M.handCrate.position.z + 0.1; }
+      else { x = sd * 0.42 * hk; y = -0.9; z = -1.25; }
+      if (i === 1 && bump > 0) { x += (0.1 * hk - x) * bump; y += (-0.22 - y) * bump; z += (-1.85 - z) * bump; }
+      hd.position.set(x, y, z); hd.scale.setScalar(hk);
+      hd.lookAt(x + sd * 0.3, y - 0.55, z + 0.8);
+    }
+  }
   function drawTray() {
-    if (!M.tray || !M.tray.visible) return;
+    if (!M.tray || !(M.tray.visible || M.handCrate.visible || M.hands[1].visible)) return;
     if (M.trayCam.aspect !== W / H) { M.trayCam.aspect = W / H; M.trayCam.updateProjectionMatrix(); }
     R.autoClear = false;
     R.clearDepth();
@@ -430,6 +492,9 @@ var View3D = (function () {
     out.x = (V3.x + 1) / 2 * W; out.y = (1 - V3.y) / 2 * H; out.z = V3.z;      // z > 1: behind the camera
     return out;
   }
+  // screen position of a point of the kitchen (front: false when it is behind the camera)
+  var so = { x: 0, y: 0, front: true };
+  function screenOf(x, y, z) { project(V2.set(x, y, z), tmp); so.x = tmp.x; so.y = tmp.y; so.front = tmp.z < 1; return so; }
   function worldAt(sx, sy, z, out) {
     V1.set(sx / W * 2 - 1, 1 - sy / H * 2, 0.5).unproject(cam);
     V1.sub(cam.position).normalize();
@@ -884,7 +949,12 @@ var View3D = (function () {
       var o = st.ST[i], S = stObj[i], g = WD.geo[i];
       if (!g) continue;
       var owned = (save.stations[o.def.id] || 0) > 0;
-      var cooking = !!(st.sh && st.sh.stations[i].cooking.length);
+      var shs = st.sh ? st.sh.stations[i] : null, hands = shs && st.sh.manual ? shs : null;
+      var cooking = !!(shs && shs.cooking.length), burnt = false;
+      if (hands) {                         // simulator: the fire is on as long as something is on it
+        cooking = false;
+        for (var qu = 0; qu < shs.cooking.length; qu++) { var ph = shs.cooking[qu].ph; if (ph === 'burnt') burnt = true; else if (ph !== 'fin') cooking = true; }
+      }
       var hv = o.hover && (owned || st.mode === 'hub') ? 1 : 0;
       o.hv = (o.hv || 0) + (hv - (o.hv || 0)) * Math.min(1, dt * 14);
       var bump = o.bumpT ? Math.max(0, 1 - (now - o.bumpT) / 260) : 0;
@@ -893,8 +963,10 @@ var View3D = (function () {
       S.holder.position.y = WD.wtTop + 0.03 + o.hv * 0.03;
       S.holder.rotation.y = fpsOn ? Math.PI : 0;      // first person: the player stands on the other side
       S.model.group.visible = owned; S.crate.visible = !owned;
-      if (owned) S.model.tick(dt, time + i * 1.3, { cooking: cooking });
+      if (owned) S.model.tick(dt, time + i * 1.3, { cooking: cooking, h: hands });
       if (cooking && Math.random() < dt * 4) puff(g);
+      if (burnt && Math.random() < dt * 9) puff(g, true);
+      syncPass(S, i, hands && fpsOn ? shs.ready : 0, g, dt);
     }
     for (var q = 0; q < steam.length; q++) {
       var p = steam[q];
@@ -905,13 +977,40 @@ var View3D = (function () {
       p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt;
       var sc = 0.16 + f * 0.3;
       p.s.scale.set(sc, sc, 1);
-      p.s.material.opacity = Math.sin(Math.PI * f) * 0.34;
+      p.s.material.opacity = Math.sin(Math.PI * f) * (p.dark ? 0.7 : 0.34);
     }
   }
-  function puff(g) {
+  // simulator: the finished dishes wait on the pass, in front of their station, as real little objects
+  function syncPass(S, i, n, g, dt) {
+    if (!S.pass) {
+      if (!n) return;
+      S.pass = new T.Group(); S.passD = []; M.wide.add(S.pass);
+    }
+    n = Math.min(4, n);
+    while (S.passD.length < n) {
+      var hold = new T.Group(); hold.add(trayDish(GD.STATIONS[i].dish)); hold.scale.setScalar(0.01);
+      S.pass.add(hold); S.passD.push(hold);
+    }
+    S.pass.position.set(g.x, WD.wtTop + 0.035, WD.zSt - 0.47);
+    for (var k = 0; k < S.passD.length; k++) {
+      var d = S.passD[k], sc = d.scale.x + ((k < n ? 0.82 : 0) - d.scale.x) * Math.min(1, dt * 12);
+      d.scale.setScalar(Math.max(0.001, sc)); d.visible = sc > 0.02;
+      if (k < n) d.position.x = (k - (n - 1) / 2) * 0.29;
+    }
+  }
+  function syncDirt(st) {
+    var s2 = st.sh, n = s2 ? s2.seats.length : 0;
+    for (var i = 0; i < M.dirt.length; i++) {
+      var show = !!(s2 && s2.manual && i < n && s2.dirt[i]);
+      M.dirt[i].visible = show;
+      if (show) M.dirt[i].position.x = seatWorldX(i, n);
+    }
+  }
+  function puff(g, dark) {
     for (var q = 0; q < steam.length; q++) {
       var p = steam[q];
       if (p.life > 0) continue;
+      p.s.material.color.setHex(dark ? 0x1c1a18 : 0xffffff); p.dark = !!dark;
       p.max = p.life = 0.7 + Math.random() * 0.4;
       p.vx = (Math.random() - 0.5) * 0.18; p.vy = 0.3 + Math.random() * 0.2;
       p.s.position.set(g.x + (Math.random() - 0.5) * g.w * 0.45, WD.wtTop + g.h * 0.72, WD.zSt + 0.05);
@@ -1090,7 +1189,9 @@ var View3D = (function () {
       syncCustomers(st);
       syncStaff(st, fp);
       if (full) { syncStations(st, dt); syncTitle(title && wide); }
+      syncDirt(st);
       syncTray(fp, dt);
+      syncHands(fp);
       lighting(st, title);
       animate(dt);
       if (fp) {
@@ -1122,10 +1223,12 @@ var View3D = (function () {
       R.render(scene, cam);
       drawTray();
       if (!title) syncDom(st);
+      if (fp && Fps.place) Fps.place(screenOf);
     } catch (e) {
       console.error(e);
       failed = true;
       UI.toast('La vue 3D a rencontré un problème : retour à la vue classique.');
+      if (window.Fps && Fps.active()) Fps.abort();        // a simulator day goes on in the manager's view
       if (App.relayout) App.relayout(); else apply();
     }
   }

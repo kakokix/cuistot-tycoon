@@ -7,7 +7,7 @@ Jeu de gestion de restaurant : tu incarnes **Chef Marcel**, qui ouvre « Chez Cu
 - Mode Détente (sans stress) ou Classique
 - **Version PC grand écran** : le restaurant est une scène 3D qui prend tout l'écran, avec menu, boutique, carte et histoires en grand format
 - Sur téléphone : mise en page portrait, avec le comptoir en 3D
-- **Mode Simulateur** (2.0) : marche dans ta cuisine à la première personne, lance les cuissons, prends les plats sur ton plateau et sers les clients au comptoir (PC et téléphone)
+- **Mode Simulateur** (2.1) : à la première personne, comme dans un vrai fast-food. Tu prends les commandes au comptoir, tu cuisines chaque plat geste par geste (steak à poser puis à retourner, burger à monter, panier de frites à plonger puis à égoutter…), tu sers sur ton plateau, tu vas chercher les ingrédients au frigo et tu essuies le comptoir. En mode Classique, ce qu'on oublie sur le feu brûle (PC et téléphone)
 - **Club des chefs** (2.0) : classement mondial, défi du jour (même cuisine pour tous), missions et cadeau quotidiens, codes cadeaux, statistiques, prestige (toques d'or)
 
 ## Télécharger

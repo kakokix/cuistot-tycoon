@@ -13,6 +13,40 @@ var GD = (function () {
   ];
   var MAX_ST_LEVEL = 10;
 
+  // ---- simulator (first person): the gestures of each station, like in a real kitchen ----
+  //   start : first gesture (uses one portion of the station's stock)
+  //   cook  : what the player reads while it cooks
+  //   mid   : gesture needed half-way (the cooking waits for it)
+  //   fin   : gestures once it is cooked; a leading "+" puts one dish on the pass
+  //   burn  : 1 = burns when it is left on the heat too long (Classique only)
+  //   quick : share of the normal cooking time (cold preparations)
+  var HANDS = {
+    grill:  { start: 'Poser un steak', cook: 'Le steak cuit', mid: 'Retourner le steak', fin: ['Poser le pain et le steak', 'Ajouter fromage et salade', '+Fermer le burger'], burn: 1 },
+    jus:    { start: 'Mixer les fruits', cook: 'Ça mixe', fin: ['+Verser un verre'], burn: 0 },
+    frites: { start: 'Plonger un panier', cook: 'Les frites dorent', fin: ['Égoutter et saler', '+Remplir un cornet', '+Remplir un cornet'], burn: 1 },
+    pizza:  { start: 'Enfourner une pizza', cook: 'La pizza cuit', mid: 'Tourner la pizza', fin: ['Sortir la pizza', '+Couper et servir'], burn: 1 },
+    soupe:  { start: 'Lancer une marmite', cook: 'La soupe mijote', fin: ['+Servir un bol', '+Servir un bol', '+Servir un bol'], burn: 0 },
+    wok:    { start: 'Lancer le wok', cook: 'Ça saisit', mid: 'Sauter les nouilles', fin: ['+Dresser un bol'], burn: 1 },
+    sushi:  { start: 'Étaler le riz', cook: 'Le riz repose', fin: ['Garnir de poisson', 'Rouler', '+Couper'], burn: 0, quick: 0.35 },
+    gateau: { start: 'Préparer la pâte', cook: 'Le batteur tourne', fin: ['Monter le gâteau', '+Couper une part', '+Couper une part'], burn: 0 }
+  };
+  // pace of a simulator day: longer days, customers a little less often and much more patient
+  var SIM = {
+    duration: 2.1, patience: 2.6,
+    goal: 0.46,               // goal of a simulator day: this share of what the kitchen could bring (see Shift)
+    goalClassic: 1.25,        // ... a quarter more in Classique
+    spawn: 2.0, spawnMin: [8.5, 13],  // customers come less often: at least this many seconds apart (Détente, Classique)
+    stock: 8,                 // portions in a station before a trip to the fridge
+    pass: 4,                  // dishes that fit on the pass in front of a station
+    burnMid: 9, burnDone: 12, // seconds before it burns (waiting to be turned / to be taken off the heat)
+    askDrain: 0.5,            // patience lost while nobody takes the order (share of the normal speed)
+    waiterAsk: [7, 6, 5, 4, 3], // seconds before the waiter takes an order himself, per level
+    staffPace: 1.5,           // the helpers' gestures take this many times their usual interval
+    dirt: 0.4,                // chance that a customer leaves crumbs on the counter
+    close: 45,                // seconds given to finish the last orders (Détente)
+    rush: { at: 0.45, dur: 26, mul: 0.55, day: 3 }   // "coup de feu": from day 3, customers come faster for a while in the middle of the day
+  };
+
   // realistic customers (sprites cu_<id>_<mood>); the food critic is the VIP (pays x2)
   var CUSTOMERS = ['touriste', 'mamie', 'garcon', 'affaires', 'surfeur', 'papi', 'photographe', 'explorateur'];
   var VIP_CUSTOMER = 'critique';
@@ -68,7 +102,11 @@ var GD = (function () {
     { id: 'defi7',     name: 'Compétiteur',          desc: 'Jouer 7 défis du jour',         stat: 'defis', goal: 7,   reward: 900 },
     { id: 'gift7',     name: 'Fidèle au poste',      desc: 'Prendre le cadeau du jour 7 jours de suite', stat: 'streak', goal: 7, reward: 1000 },
     { id: 'code1',     name: 'Bon plan',             desc: 'Utiliser un code cadeau',       stat: 'codes', goal: 1,   reward: 150 },
-    { id: 'prestige1', name: 'Toque d’or',           desc: 'Gagner une toque d’or (prestige)', stat: 'prestige', goal: 1, reward: 3000 }
+    { id: 'prestige1', name: 'Toque d’or',           desc: 'Gagner une toque d’or (prestige)', stat: 'prestige', goal: 1, reward: 3000 },
+    // version 2.1: the simulator played with the hands
+    { id: 'hand50',    name: 'Fait main',            desc: 'Cuisiner 50 plats à la main (Simulateur)', stat: 'hand', goal: 50, reward: 500 },
+    { id: 'order100',  name: 'Bonjour, vous désirez ?', desc: 'Prendre 100 commandes au comptoir', stat: 'orders', goal: 100, reward: 800 },
+    { id: 'wipe30',    name: 'Comptoir impeccable',  desc: 'Essuyer 30 fois le comptoir',   stat: 'wipes', goal: 30,  reward: 400 }
   ];
   function achValue(save, stat) {
     var st = save.stats || {};
@@ -224,7 +262,7 @@ var GD = (function () {
     BUSINESS: BUSINESS, OFFLINE_CAP_H: OFFLINE_CAP_H,
     stationById: stationById, stationStats: stationStats, upgradeCost: upgradeCost, seatsFor: seatsFor,
     businessCost: businessCost, passiveRate: passiveRate, xpNeed: xpNeed, goalFor: goalFor, dayConfig: dayConfig,
-    prestigeMul: prestigeMul, MANUAL_GOAL: 0.6,
+    prestigeMul: prestigeMul, MANUAL_GOAL: 0.6, HANDS: HANDS, SIM: SIM,
     newSave: newSave
   };
 })();

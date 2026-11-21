@@ -576,7 +576,8 @@ img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
 .fps-hud { position: absolute; inset: 0; pointer-events: none; }
 .fps .station, .fps .cust { pointer-events: none; }
 .fps .station .key, .fps .station .lv, .fps .station .upg, .fps .hub-bot, .fps .plaque, .fps .vignette, .fps .simchip, .fps .visitbtn, .fps .bookbtn, .fps .setbtn { display: none !important; }
-.fps .station.tg .nm { filter: drop-shadow(0 0 10px #fff7a0) drop-shadow(0 0 4px #fff); }
+.fps .station .nm { transition: opacity .12s; }
+.fps .station.tg .nm { opacity: .12; }     /* the gesture is written just there, under the sight */
 .fps-cross { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: rgba(255, 255, 255, .75); box-shadow: 0 0 0 2px rgba(0, 0, 0, .45); transition: transform .12s, background .12s; }
 .fps-cross.aim { transform: scale(1.25); }
 .fps-cross.can { transform: scale(1.9); background: #8ee04a; box-shadow: 0 0 0 3px #1d3a1a, 0 0 14px #c8ff8a; }
@@ -623,6 +624,61 @@ img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
 .clubbtn .key { display: none; }
 .wide.keys .clubbtn .key { display: flex; position: absolute; left: 50%; top: -15px; transform: translateX(-50%); z-index: 1; }
 .fps .clubbtn { display: none !important; }
+/* ---- simulator "à la main": gauges of what is on the fire, stock, order bubble, labels in the kitchen ---- */
+.station.hands .prog { display: none !important; }
+.fps .station.hands .ready { top: -112px; height: 60px; }      /* the ready dishes float above the gauges */
+.fps .station.hands .ready .dish { width: 58px; height: 58px; }
+.fps .station.hands .ready .dish + .dish { margin-left: -28px; }
+.station .units { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 4px; display: none; gap: 6px; pointer-events: none; }
+.fps .station .units { display: flex; }
+.station .stock { display: none; }
+.fps .station .stock { display: block; }
+.rush .timer { animation: unitCall .45s ease-in-out infinite alternate; }
+/* on a phone the gauges are seen from further away: a little bigger */
+#app:not(.wide) .station .unit { width: 76px; height: 32px; border-radius: 16px; }
+#app:not(.wide) .station .unit b { font-size: 21px; }
+#app:not(.wide) .station .unit.mid b { font-size: 26px; }
+#app:not(.wide) .station .unit.fin b { font-size: 18px; }
+.station .unit { position: relative; width: 62px; height: 26px; border-radius: 13px; background: rgba(34, 17, 6, .9); border: 3px solid #fff3cc; box-sizing: border-box; overflow: hidden; box-shadow: 0 3px 0 rgba(0, 0, 0, .35); }
+.station .unit i { position: absolute; left: 0; top: 0; bottom: 0; background: #f4b21c; transition: width .12s linear; }
+.station .unit b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 400 17px/1 'Luckiest Guy', sans-serif; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, .55); padding-top: 2px; }
+.station .unit.mid { border-color: #7fd4ff; animation: unitCall .5s ease-in-out infinite alternate; }
+.station .unit.mid i { background: #2a8ccc; }
+.station .unit.mid b { font-size: 21px; padding-top: 0; }
+.station .unit.done { border-color: #c8ff8a; animation: unitCall .7s ease-in-out infinite alternate; }
+.station .unit.done i { background: #4fb82a; }
+.station .unit.fin i { background: #8a6a3a; }
+.station .unit.fin b { font-size: 15px; }
+.station .unit.hot { border-color: #ff5a3a; animation: unitCall .22s ease-in-out infinite alternate; }
+.station .unit.hot i { background: #e8433a; }
+.station .unit.burnt { border-color: #5a5a5a; }
+.station .unit.burnt i { background: #17110d; }
+.station .unit.burnt b { color: #ff5a3a; }
+@keyframes unitCall { from { transform: scale(1); } to { transform: scale(1.16); } }
+.station .stock { position: absolute; left: 50%; bottom: -50px; margin-left: 82px; min-width: 38px; height: 38px; padding: 3px 8px 0; box-sizing: border-box; border-radius: 19px; background: #fff3cc; border: 3px solid #6b3a14; color: #6b3a14; font: 400 19px/30px 'Luckiest Guy', sans-serif; text-align: center; box-shadow: 0 3px 0 rgba(0, 0, 0, .35); pointer-events: none; }
+.station .stock.low { background: #ffd27a; border-color: #b85c00; color: #8a3c00; }
+.station .stock.empty { background: #e8433a; border-color: #fff; color: #fff; animation: unitCall .4s ease-in-out infinite alternate; }
+.bubble.ask { background-image: var(--a-bubble4); }
+.bubble.ask .q { position: absolute; left: 0; right: 4px; top: 10px; text-align: center; font: 400 66px/76px 'Luckiest Guy', sans-serif; color: #d2611c; text-shadow: 0 3px 0 rgba(107, 58, 20, .25); animation: unitCall .5s ease-in-out infinite alternate; }
+.fps-tickets .tk.ask { border-color: #f4a300; background: rgba(255, 236, 190, .95); }
+.fps-tickets .tk em { font: 400 36px/50px 'Luckiest Guy', sans-serif; color: #d2611c; margin: 6px 16px 0 12px; }
+.fps-prompt small { font-size: .72em; opacity: .75; margin-left: 8px; }
+.fps-hands { position: absolute; left: 50%; bottom: 470px; transform: translateX(-50%); padding: 8px 20px 6px; border-radius: 18px; background: rgba(43, 20, 5, .84); border: 2px solid rgba(255, 243, 204, .5); color: #fff3cc; font-size: 19px; font-weight: 600; white-space: nowrap; opacity: 0; transition: opacity .15s; }
+.fps-hands.on { opacity: 1; }
+.wide .fps-hands { bottom: 330px; font-size: 21px; }
+.fps-coach { position: absolute; left: 286px; right: 14px; top: 180px; display: flex; align-items: center; gap: 12px; padding: 9px 14px 7px; border-radius: 16px; box-sizing: border-box; background: rgba(18, 58, 92, .9); border: 3px solid #9fd8ff; color: #eef8ff; font-size: 19px; line-height: 1.15; font-weight: 600; opacity: 0; transition: opacity .15s; box-shadow: 0 4px 0 rgba(0, 0, 0, .3); }
+.fps-coach.on { opacity: 1; }
+.fps-coach .ar { flex: none; width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 19px solid #ffe36a; transition: transform .15s; }
+.fps-coach .ar.right { transform: rotate(90deg); }
+.fps-coach .ar.down { transform: rotate(180deg); }
+.fps-coach .ar.left { transform: rotate(-90deg); }
+.wide .fps-coach { left: 50%; right: auto; top: 86px; transform: translateX(-50%); font-size: 21px; white-space: nowrap; padding: 9px 20px 7px; }
+.fps-tag { position: absolute; transform: translate(-50%, -100%); padding: 7px 16px 3px; border-radius: 16px; background: rgba(43, 20, 5, .88); border: 3px solid #e8c88a; color: #fff3cc; font: 400 22px/1.05 'Luckiest Guy', sans-serif; text-align: center; white-space: nowrap; visibility: hidden; box-shadow: 0 4px 0 rgba(0, 0, 0, .3); }
+.fps-tag span { display: block; font: 600 14px/1.3 'Fredoka', sans-serif; opacity: .85; }
+.fps-tag.tg { border-color: #8ee04a; box-shadow: 0 0 0 3px rgba(200, 255, 138, .6), 0 4px 0 rgba(0, 0, 0, .3); }
+.fps-tag.alert { background: rgba(170, 34, 14, .93); border-color: #fff; animation: tagCall .45s ease-in-out infinite alternate; }
+@keyframes tagCall { from { transform: translate(-50%, -100%) scale(1); } to { transform: translate(-50%, -100%) scale(1.12); } }
+.fps-tag.dirt { font-size: 16px; padding: 5px 12px 2px; border-color: #9fd8ff; border-radius: 13px; }
 .t-btns .t-club { display: flex; align-items: center; justify-content: center; background-size: contain; background-repeat: no-repeat; background-position: center; }
 .t-btns .t-club img { width: 58%; height: 58%; margin-top: -6%; }
 .club-tile { position: absolute; border-radius: 26px; background: linear-gradient(#fff8e6, #f6e3bd); border: 5px solid #a8743f; box-shadow: 0 6px 0 rgba(0, 0, 0, .22); box-sizing: border-box; }

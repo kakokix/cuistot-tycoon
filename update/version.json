@@ -1,20 +1,24 @@
 {
- "version": "2.0.1",
- "label": "2.0.1",
- "build": 7,
+ "version": "2.1.0",
+ "label": "2.1",
+ "build": 8,
  "notes": [
-  "<b>Correction</b> : sur téléphone, les stations disparaissaient de la cuisine après une journée en Simulateur",
-  "Rappel de la 2.0 : mode Simulateur, Club des chefs, codes cadeaux, classement mondial"
+  "<b>Simulateur à la main</b> : prends la commande du client",
+  "Steak à retourner, burger à monter, frites à égoutter…",
+  "En Classique, ce qu’on oublie sur le feu <b>brûle</b> !",
+  "Frigo à ingrédients, comptoir à essuyer, coup de feu",
+  "Tes mains, les plats sur le passe, les bruits de cuisine",
+  "Journées plus longues, conseils, 3 nouveaux succès"
  ],
  "web": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/game.html",
-  "sha256": "2b0c6fb6f601a5ecadf705abb3e77dea4f45b8c6a59ff44346b8a8ed05220138",
-  "size": 7259397
+  "sha256": "e50037bd4c003fa41f1a41057a06869920060de7d58c71617a214d9cbf08d64d",
+  "size": 7317003
  },
  "desktop": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/desktop.html",
-  "sha256": "b87fb0fccc8462de6131576fbf3b221518585f7ed024099228b10f403560a490",
-  "size": 7259438,
+  "sha256": "df4ae6b7f85542358461ed018690999653ce68f11a698f99511d0bd4b853812d",
+  "size": 7317044,
   "minNative": 1,
   "exe": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/download/CuistotTycoon.exe"
  },

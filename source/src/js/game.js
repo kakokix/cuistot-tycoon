@@ -71,7 +71,8 @@ var Game = (function () {
     }
     var tutorial = !App.save.seenTuto.basic && d === 1;
     var sim = !tutorial && (opts.sim != null ? !!opts.sim && View3D.usable() : simWanted());
-    if (sim && !App.save.seenTuto.sim) { App.save.seenTuto.sim = 1; Store.save(App.save); UI.simHelp(function () { startDay(d, opts); }); return; }
+    // (sim2: the help of the simulator played with the hands, new in 2.1, is shown once to everybody)
+    if (sim && !App.save.seenTuto.sim2) { App.save.seenTuto.sim = App.save.seenTuto.sim2 = 1; Store.save(App.save); UI.simHelp(function () { startDay(d, opts); }); return; }
     sh = new Shift(App.save, d, { tutorial: tutorial, manual: sim });
     ended = false; lastTick = -1;
     Scene.setMode('shift', sh);

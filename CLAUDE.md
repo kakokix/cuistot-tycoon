@@ -5,7 +5,7 @@ L'utilisateur écrit en français et on le tutoie. Le jeu est en français.
 ## Ce que contient le dépôt
 
 - `source/` : le code du jeu (HTML/CSS/JS sans framework) et les outils.
-  - `src/js/` : `data.js` (équilibrage, lieux, succès), `sim.js` (simulation d'une journée, sans DOM), `progress.js`, `scene.js` (affichage du restaurant), `models.js` (modèles 3D des stations, des objets et des plats), `view3d.js` (vue 3D three.js), `fps.js` (mode Simulateur à la première personne), `ui.js` (fenêtres), `story.js` (histoire, carnet), `world.js` (carte de l'île), `achievements.js`, `updater.js` (mises à jour), `club.js` (Club des chefs : profil, classement mondial, codes, cadeau du jour, missions, défi du jour, statistiques, prestige), `game.js`, `main.js`.
+  - `src/js/` : `data.js` (équilibrage, lieux, succès), `sim.js` (simulation d'une journée, sans DOM ; contient aussi les gestes du simulateur), `progress.js`, `scene.js` (affichage du restaurant), `models.js` (modèles 3D des stations, des objets et des plats), `view3d.js` (vue 3D three.js), `fps.js` (mode Simulateur à la première personne), `ui.js` (fenêtres), `story.js` (histoire, carnet), `world.js` (carte de l'île), `achievements.js`, `updater.js` (mises à jour), `club.js` (Club des chefs : profil, classement mondial, codes, cadeau du jour, missions, défi du jour, statistiques, prestige), `game.js`, `main.js`.
   - `src/version.json` : **numéro de version**. `build` est un entier qui doit augmenter à chaque publication.
   - `tools/build.py` : construit `dist/index.html` (web, Android), `dist/desktop/index.html` (Windows) et `dist/update/` (fichiers de mise à jour).
   - `tools/kpack.py` : convertit le pack 3D « Kitchen & Diner 3D » en `build/kmodels.json` (voir plus bas).
@@ -27,10 +27,19 @@ Même règle pour le pack 3D **« Kitchen & Diner 3D » de Harning** (meubles, v
 
 ## Mode Simulateur (première personne)
 
-- Bouton « Vue gérant / Vue simulateur » dans la cuisine (touche `V`). La journée est la même simulation (`Shift` avec `opts.manual`) : pas de service automatique, objectifs × `GD.MANUAL_GOAL`, le joueur cuit, prend (3 plats au plus) et sert lui-même (`takeDish`, `giveDish`).
-- `Fps` (fps.js) gère la marche (touches physiques ZQSD/WASD/flèches, souris capturée ; sur téléphone : manette à gauche, glisser pour regarder, gros bouton d'action) ; `View3D.setFps(true)` passe toute la cuisine en 3D sur n'importe quel écran (`View3D.isFull()`), ajoute la salle (`buildRoom`), le plateau porté (scène à part dessinée après la cuisine) et les aides avec des jambes en 3D.
+- Bouton « Vue gérant / Vue simulateur » dans la cuisine (touche `V`). La journée est la même simulation (`Shift` avec `opts.manual`), mais tout se fait à la main, comme dans un vrai fast-food :
+  - le client arrive dans l'état `ask` : il faut aller prendre sa commande (`takeOrder`) ;
+  - chaque station a ses gestes, décrits dans `GD.HANDS` (data.js) : `start` (utilise une portion du stock), `mid` (geste à mi-cuisson : la cuisson attend), `fin` (gestes de finition ; un « + » devant = pose un plat sur le passe), `burn` (brûle en Classique si on l'oublie sur le feu) ;
+  - ce qui cuit est une « unité » dans `st.cooking` (`ph` : `cook`, `mid`, `done`, `fin`, `burnt`) : voir `unitsTick`, `midAct`, `finAct`, `trash` dans sim.js ;
+  - stock par station (`st.stock`), réassort avec une caisse prise au frigo (`restock`) ; miettes sur le comptoir (`sh.dirt`, `wipe`) ; coup de feu en milieu de journée (`GD.SIM.rush`) ;
+  - les aides font les mêmes gestes, un à la fois, à leur rythme (`staffHands`).
+- Rythme et réglages dans `GD.SIM` (journées ×2,1, clients plus espacés et plus patients, taille du stock et du passe). L'objectif d'une journée en simulateur est calculé d'après la cuisine du joueur (`sh.potential` × `GD.SIM.goal`), pas d'après l'objectif de la vue gérant.
+- `Fps` (fps.js) : marche (touches physiques ZQSD/WASD/flèches, souris capturée ; sur téléphone : manette à gauche, glisser pour regarder, gros bouton d'action), visée (`pos`, `aim`), geste possible (`describe`), et `plan()` = la prochaine chose à faire (sert au conseil des premiers jours et aux robots de test).
+- `View3D.setFps(true)` passe toute la cuisine en 3D sur n'importe quel écran (`View3D.isFull()`), ajoute la salle (`buildRoom`). Chaque modèle de station (`models.js`, `BUILD.<id>`) reçoit `s.h` = la station de la journée et montre l'état réel (steaks crus, cuits, brûlés, paniers, pizza, etc.) ; les plats prêts sont posés en 3D sur le passe (`syncPass`) ; les mains du joueur tiennent le plateau ou la caisse (`syncHands`, scène à part dessinée après la cuisine).
+- En quittant la vue simulateur, `Scene.layoutPortrait` remet les tuiles des stations en place (en première personne, `View3D.syncDom` les met à l'échelle et cache celles qui sont derrière le joueur) : ne pas retirer cette remise à zéro (bug de la 2.0 : cuisine vide sur téléphone).
+- Si la 3D tombe en panne pendant une journée, `Fps.abort()` rend la journée à la vue gérant (`Shift.toAuto`).
 - Bouton « visite » : se promener dans la cuisine sans clients (`Game.visit()`).
-- Tests : `T.fpbot(s)` (robot qui vise et agit) et `T.fpwalk(s)` (robot qui marche vraiment) dans `tools/testkit.js`.
+- Tests : `T.prof(jour, mode, [serveur, commis])` (sauvegarde type d'un jour donné), `T.fpbot(s)` (robot rapide) et `T.fpwalk(s, adresse)` (robot qui marche vraiment : sert à régler les objectifs) dans `tools/testkit.js`. Après une journée en simulateur, **vérifier aussi la cuisine en portrait** (`Game.toHub()`) : les tests de charge ne jouent pas en simulateur.
 
 ## Club des chefs, classement mondial et codes
 
