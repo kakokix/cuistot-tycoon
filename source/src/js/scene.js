@@ -193,6 +193,8 @@ var Scene = (function () {
     for (var i = 0; i < 8; i++) {
       var c = i % 4, r = Math.floor(i / 4), o = ST[i];
       o.el.style.width = ''; o.el.style.height = '';
+      // back from the first-person view: the labels were scaled, and hidden when behind the player
+      o.el.style.transform = ''; o.el.style.visibility = ''; o.vis = true; o.sk = 1;
       o.el.style.left = px(COL0 + c * (COLW + COLG));
       o.el.style.top = px(r === 0 ? L.row1 : L.row2);
     }

@@ -1,24 +1,20 @@
 {
- "version": "2.0.0",
- "label": "2.0",
- "build": 6,
+ "version": "2.0.1",
+ "label": "2.0.1",
+ "build": 7,
  "notes": [
-  "<b>Mode Simulateur</b> : marche dans ta cuisine, cuisine et sers toi-même",
-  "<b>Vrais modèles 3D</b> et cuisine entièrement meublée",
-  "<b>Club des chefs</b> : classement mondial, défi du jour, missions, cadeau quotidien",
-  "<b>Codes cadeaux</b> : essaie BIENVENUE et CUISTOT2 !",
-  "<b>Prestige</b> : toques d’or (+25 % de gains), nouveaux succès, statistiques",
-  "Interfaces mieux placées sur téléphone et sur PC"
+  "<b>Correction</b> : sur téléphone, les stations disparaissaient de la cuisine après une journée en Simulateur",
+  "Rappel de la 2.0 : mode Simulateur, Club des chefs, codes cadeaux, classement mondial"
  ],
  "web": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/game.html",
-  "sha256": "4614463d7527891218dfbdd9d2d9e4bcd318dbcc3da11f21202df863d871ad92",
-  "size": 7259428
+  "sha256": "2b0c6fb6f601a5ecadf705abb3e77dea4f45b8c6a59ff44346b8a8ed05220138",
+  "size": 7259397
  },
  "desktop": {
   "url": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/update/desktop.html",
-  "sha256": "399ab29e4a8f21bd8a0b581acc9507b5bc993ea8fb040cd6782a9d36bd12196c",
-  "size": 7259469,
+  "sha256": "b87fb0fccc8462de6131576fbf3b221518585f7ed024099228b10f403560a490",
+  "size": 7259438,
   "minNative": 1,
   "exe": "https://raw.githubusercontent.com/kakokix/cuistot-tycoon/main/download/CuistotTycoon.exe"
  },

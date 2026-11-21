@@ -1,13 +1,9 @@
 {
- "version": "2.0.0",
- "label": "2.0",
- "build": 6,
- "notes": [
-  "<b>Mode Simulateur</b> : marche dans ta cuisine, cuisine et sers toi-même",
-  "<b>Vrais modèles 3D</b> et cuisine entièrement meublée",
-  "<b>Club des chefs</b> : classement mondial, défi du jour, missions, cadeau quotidien",
-  "<b>Codes cadeaux</b> : essaie BIENVENUE et CUISTOT2 !",
-  "<b>Prestige</b> : toques d’or (+25 % de gains), nouveaux succès, statistiques",
-  "Interfaces mieux placées sur téléphone et sur PC"
- ]
+  "version": "2.0.1",
+  "label": "2.0.1",
+  "build": 7,
+  "notes": [
+    "<b>Correction</b> : sur téléphone, les stations disparaissaient de la cuisine après une journée en Simulateur",
+    "Rappel de la 2.0 : mode Simulateur, Club des chefs, codes cadeaux, classement mondial"
+  ]
 }
