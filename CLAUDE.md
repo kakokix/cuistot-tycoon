@@ -47,7 +47,7 @@ Même règle pour le pack 3D **« Kitchen & Diner 3D » de Harning** (meubles, v
 - Bouton « visite » : se promener dans la cuisine sans clients (`Game.visit()`).
 - Les robots jouent beaucoup de secondes de jeu d'un coup : le navigateur annonce alors la capture et la libération de la souris en retard, et le jeu croyait à un appui sur Échap (pause). Ils jouent donc sans capturer la souris (`T._nomouse`), et le jeu ne prend plus pour une pause une libération qu'il a demandée lui-même (`selfExit` dans fps.js).
 - Dans un test Playwright, ne jamais lire ou écrire `localStorage` dans un `add_init_script` : la page reçoit parfois un stockage détaché et vide (la sauvegarde semble perdue, puis réapparaît). Écrire la sauvegarde depuis la page (`page.evaluate`), puis recharger.
-- Tests : `T.prof(jour, mode, [serveur, commis])` (sauvegarde type d'un jour donné), `T.fpbot(s)` (robot rapide) et `T.fpwalk(s, adresse)` (robot qui marche vraiment : sert à régler les objectifs) dans `tools/testkit.js`. Après une journée en simulateur, **vérifier aussi la cuisine en portrait** (`Game.toHub()`) : les tests de charge ne jouent pas en simulateur.
+- Tests : `T.prof(jour, mode, [serveur, commis])` (sauvegarde type d'un jour donné), `T.fpbot(s)` (robot rapide) et `T.fpwalk(s, adresse)` (robot qui marche vraiment : sert à régler les objectifs) dans `tools/testkit.js`. Après une journée en simulateur, **vérifier aussi la cuisine en portrait** (`Game.toHub()`) : les tests de charge ne jouent pas en simulateur. `node tools/sim_drive.js` vérifie sans affichage les règles du drive, de la fermeture et des remboursements (doit finir par `ALL PASS`).
 
 ## Club des chefs, classement mondial et codes
 
