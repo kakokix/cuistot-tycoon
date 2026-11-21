@@ -30,10 +30,22 @@ var GD = (function () {
     sushi:  { start: 'Étaler le riz', cook: 'Le riz repose', fin: ['Garnir de poisson', 'Rouler', '+Couper'], burn: 0, quick: 0.35 },
     gateau: { start: 'Préparer la pâte', cook: 'Le batteur tourne', fin: ['Monter le gâteau', '+Couper une part', '+Couper une part'], burn: 0 }
   };
+  // how a customer asks for 1, 2 or 3 of each dish at the register (simulator)
+  var SAY = {
+    burger: ['un burger', 'deux burgers', 'trois burgers'],
+    jus: ['un jus tropical', 'deux jus tropicaux', 'trois jus tropicaux'],
+    frites: ['une portion de frites', 'deux portions de frites', 'trois portions de frites'],
+    pizza: ['une pizza', 'deux pizzas', 'trois pizzas'],
+    soupe: ['une soupe', 'deux soupes', 'trois soupes'],
+    nouilles: ['un bol de nouilles', 'deux bols de nouilles', 'trois bols de nouilles'],
+    sushi: ['un plateau de sushis', 'deux plateaux de sushis', 'trois plateaux de sushis'],
+    gateau: ['une part de gâteau', 'deux parts de gâteau', 'trois parts de gâteau']
+  };
   // pace of a simulator day: longer days, customers a little less often and much more patient
   var SIM = {
     duration: 2.1, patience: 2.6,
-    goal: 0.46,               // goal of a simulator day: this share of what the kitchen could bring (see Shift)
+    goal: 0.34,               // goal of a simulator day: this share of what the kitchen could bring (see Shift)
+    stars: [1.6, 2.1],        // ... and 2 and 3 stars at this many times the goal (a slow player still wins the day)
     goalClassic: 1.25,        // ... a quarter more in Classique
     spawn: 2.0, spawnMin: [8.5, 13],  // customers come less often: at least this many seconds apart (Détente, Classique)
     stock: 8,                 // portions in a station before a trip to the fridge
@@ -43,7 +55,9 @@ var GD = (function () {
     waiterAsk: [7, 6, 5, 4, 3], // seconds before the waiter takes an order himself, per level
     staffPace: 1.5,           // the helpers' gestures take this many times their usual interval
     dirt: 0.4,                // chance that a customer leaves crumbs on the counter
-    close: 45,                // seconds given to finish the last orders (Détente)
+    close: 60,                // seconds given to finish the last orders (Détente); who paid and is not served is paid back
+    // the register: share of customers who pay in cash (the change has to be given), what a mistake costs
+    cash: 0.35, posPenalty: 0.08, changeGood: 1.15, changeBad: 0.8,
     rush: { at: 0.45, dur: 26, mul: 0.55, day: 3 }   // "coup de feu": from day 3, customers come faster for a while in the middle of the day
   };
 
@@ -262,7 +276,7 @@ var GD = (function () {
     BUSINESS: BUSINESS, OFFLINE_CAP_H: OFFLINE_CAP_H,
     stationById: stationById, stationStats: stationStats, upgradeCost: upgradeCost, seatsFor: seatsFor,
     businessCost: businessCost, passiveRate: passiveRate, xpNeed: xpNeed, goalFor: goalFor, dayConfig: dayConfig,
-    prestigeMul: prestigeMul, MANUAL_GOAL: 0.6, HANDS: HANDS, SIM: SIM,
+    prestigeMul: prestigeMul, MANUAL_GOAL: 0.6, HANDS: HANDS, SIM: SIM, SAY: SAY,
     newSave: newSave
   };
 })();

@@ -90,6 +90,7 @@ var App = { save: null, W: 720, H: 1280, scale: 1, wide: false, screen: 'title',
     if (UI.back()) return true;
     if (World.isOpen()) { World.close(); return true; }
     if (Tuto.blocking()) return true;
+    if (window.Fps && Fps.posOpen()) { Fps.posClose(); return true; }   // simulator: leave the register
     if (window.Fps && Fps.isFree()) { Fps.stop(); return true; }        // end of a visit of the kitchen
     if (App.screen === 'game') {
       if (Game.shift() && !Game.shift().over) { Game.pause(); return true; }

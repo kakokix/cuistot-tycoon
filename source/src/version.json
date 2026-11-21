@@ -1,13 +1,13 @@
 {
-  "version": "2.1.0",
-  "label": "2.1",
-  "build": 8,
+  "version": "2.2.0",
+  "label": "2.2",
+  "build": 9,
   "notes": [
-    "<b>Simulateur à la main</b> : prends la commande du client",
-    "Steak à retourner, burger à monter, frites à égoutter…",
-    "En Classique, ce qu’on oublie sur le feu <b>brûle</b> !",
-    "Frigo à ingrédients, comptoir à essuyer, coup de feu",
-    "Tes mains, les plats sur le passe, les bruits de cuisine",
-    "Journées plus longues, conseils, 3 nouveaux succès"
+    "<b>La caisse</b> : le client dit sa commande, tu la tapes",
+    "Il paie tout de suite, par carte ou en espèces",
+    "En espèces : rends la bonne monnaie, le pourboire monte",
+    "Pas servi ? Il est remboursé. Service parfait : bonus !",
+    "Touches 1 à 8 et Entrée sur PC, gros boutons au doigt",
+    "Corrigé : plantes et tambours parfois invisibles"
   ]
 }

@@ -68,13 +68,16 @@ var View3D = (function () {
   // SVG art (plants, drums...) rasterised at high resolution for a crisp texture
   function texSvg(id, src, scale) {
     if (texCache['svg_' + id]) return texCache['svg_' + id];
-    var c = document.createElement('canvas'), t = new T.CanvasTexture(c);
+    // The canvas is given to the texture only once it has its final size: a texture sent to the
+    // graphics card while the canvas is still empty (300x150) can never take the bigger picture
+    // afterwards (the plants and the drums then stayed invisible for the whole session).
+    var c = document.createElement('canvas'), t = new T.Texture();
     t.colorSpace = T.SRGBColorSpace; t.userData.ready = false;
     var im = new Image();
     im.onload = function () {
       c.width = Math.round(im.width * (scale || 4)); c.height = Math.round(im.height * (scale || 4));
       c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
-      t.needsUpdate = true; t.userData.ready = true;
+      t.image = c; t.needsUpdate = true; t.userData.ready = true;
     };
     im.src = src;
     texCache['svg_' + id] = t;

@@ -15,6 +15,8 @@ var Fps = (function () {
   var EYE = 2.15, ZMIN = 0.98, ZMAX = 3.32, REACH = 2.5;
   var FRIDGE = { x: 6.9, y: 1.35, z: 3.05 };      // the middle of the fridge door (see View3D.buildRoom)
   var touchMode = false, stepN = 0, ambT = 0, actAt = -1e9;
+  var reg = null;                                 // the register, while an order is being typed (see openPos)
+  var selfExit = false;                           // the game itself has just released the mouse (see onLockChange)
 
   function el(tag, cls, parent, html) { return UI.el(tag, cls, parent, html); }
   function isTouch() { return ('ontouchstart' in window) || navigator.maxTouchPoints > 0; }
@@ -48,7 +50,7 @@ var Fps = (function () {
     if (!on) return;
     // dishes still in the hands go back to their station
     if (sh && !sh.over) carry.forEach(function (d) { sh.putBack(d.st); });
-    on = false; sh = null; carry = []; crate = false; target = null; keys = {};
+    on = false; sh = null; carry = []; crate = false; target = null; keys = {}; reg = null;
     unlock();
     Sfx.ambOff();
     if (hud) { hud.remove(); hud = null; }
@@ -83,6 +85,16 @@ var Fps = (function () {
     E.hint = el('div', 'fps-hint', hud);
     E.hands = el('div', 'fps-hands', hud);
     E.coach = el('div', 'fps-coach', hud);
+    E.reg = el('div', 'fps-reg', hud);
+    E.reg.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      var t = ev.target.closest ? ev.target.closest('[data-a]') : null;
+      if (!t) return;
+      var a = t.getAttribute('data-a');
+      if (a === 'x') closePos(); else if (a === 'u') posUndo(); else if (a === 'ok') posOk();
+      else if (a.charAt(0) === 'k') posPick(+a.slice(1));
+      else if (a.charAt(0) === 'c') posChange(+a.slice(1));
+    });
     // labels standing in the kitchen: the fridge, the places to wipe (see place())
     E.fridge = el('div', 'fps-tag fridge', hud, '<b>FRIGO</b><span>ingrédients</span>');
     E.dirt = [];
@@ -114,11 +126,14 @@ var Fps = (function () {
   }
   function unlock() {
     wantLock = false;
-    try { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); } catch (e) { }
+    try { if (document.pointerLockElement && document.exitPointerLock) { document.exitPointerLock(); selfExit = true; } } catch (e) { }
   }
   function onLockChange() {
-    var was = locked;
-    locked = !!document.pointerLockElement;
+    var was = locked, self = selfExit;
+    locked = !!document.pointerLockElement; selfExit = false;
+    // the game itself has just released the mouse (register, window): the browser says so a little
+    // later, sometimes after the mouse was asked for again. That is not the player pressing Esc.
+    if (was && !locked && self) return;
     // Esc released the mouse while a day is running: that is "pause"
     if (was && !locked && on && wantLock && sh && !sh.over && !UI.isBlocking() && !Tuto.blocking()) Game.pause();
   }
@@ -139,6 +154,7 @@ var Fps = (function () {
   function onDown(ev) {
     if (!on) return;
     ev.preventDefault();
+    if (reg) return;                              // at the register: no walking, no looking around
     if (ev.pointerType === 'mouse') {
       if (locked) return;
       if (!touchMode && !UI.isBlocking()) { lock(); }
@@ -184,6 +200,14 @@ var Fps = (function () {
   // called by the main keyboard handler while the simulator is running. Returns true when handled.
   function key(e) {
     var c = e.code || '';
+    if (reg) {                                    // the register has its own keys
+      var mk = /^(?:Digit|Numpad)([1-9])$/.exec(c);
+      if (mk) { if (reg.stage === 'cash') posChange(+mk[1] - 1); else posPick(+mk[1] - 1); }
+      else if (c === 'Backspace' || c === 'Delete') posUndo();
+      else if ((c === 'Enter' || c === 'NumpadEnter' || c === 'Space' || c === 'KeyE') && !e.repeat) posOk();
+      e.preventDefault();
+      return true;
+    }
     if (c === 'KeyE' || c === 'Enter' || c === 'Space' || c === 'KeyF') { if (!e.repeat) interact(); e.preventDefault(); return true; }
     var m = /^(?:Digit|Numpad)([1-4])$/.exec(c);
     if (m && sh) { Scene.pressBooster(+m[1] - 1); return true; }
@@ -206,8 +230,13 @@ var Fps = (function () {
     if (!on) return;
     var paused = Game.isPaused() && !free;
     if ((UI.isBlocking() || Tuto.blocking()) && locked) { var w = wantLock; unlock(); wantLock = w; }
+    if (reg && locked) unlock();                  // the register needs the mouse free, whatever happened before
     var fx = 0, fz = 0;
-    if (!paused && !UI.isBlocking()) {
+    if (reg) {
+      if (reg.closeT) { reg.closeT -= dt; if (reg.closeT <= 0) closePos(); }
+      else if (!sh || sh.over || reg.c.state !== 'ask') closePos();         // the customer left, or the day is over
+    }
+    if (!paused && !UI.isBlocking() && !reg) {
       if (keys.KeyW || keys.ArrowUp) fz += 1;
       if (keys.KeyS || keys.ArrowDown) fz -= 1;
       if (keys.KeyD || keys.ArrowRight) fx += 1;
@@ -295,7 +324,7 @@ var Fps = (function () {
   // the gesture the player would do now.  { txt, can, act }   act: order give wipe crate uncrate
   //   restock trash mid fin take cook
   function describe() {
-    if (!target) return { txt: '', can: false };
+    if (!target || reg) return { txt: '', can: false };
     var t = target, i = t.i;
     if (t.type === 'station') {
       var def = GD.STATIONS[i];
@@ -347,6 +376,7 @@ var Fps = (function () {
   // in words, and the test robots follow it.
   function plan() {
     if (!sh || sh.over) return null;
+    if (reg) return { type: 'cust', i: reg.c.seat, act: 'reg' };
     var cs = sh.customers, i, k, st, u;
     if (crate) {                              // a crate in the hands: to the emptiest station
       var bs = -1, lo = 99;
@@ -356,7 +386,8 @@ var Fps = (function () {
     for (i = 0; i < cs.length; i++) for (k = 0; k < carry.length; k++) if (sh.wants(cs[i], carry[k].st)) return { type: 'cust', i: cs[i].seat, act: 'give' };
     for (i = 0; i < 8; i++) { u = sh.unitIn(i, 'burnt'); if (u && u.by !== 'commis') return { type: 'station', i: i, act: 'trash' }; }
     for (i = 0; i < 8; i++) { u = sh.unitIn(i, 'mid'); if (u && u.by !== 'commis') return { type: 'station', i: i, act: 'mid' }; }
-    for (i = 0; i < cs.length; i++) if (cs[i].state === 'ask') return { type: 'cust', i: cs[i].seat, act: 'order' };
+    // (once the door is closed, those who already paid come first: a new order waits)
+    if (!sh.closing) for (i = 0; i < cs.length; i++) if (cs[i].state === 'ask') return { type: 'cust', i: cs[i].seat, act: 'order' };
     if (carry.length < MAXC) for (i = 0; i < 8; i++) { st = sh.stations[i]; if (st.ready > 0 && sh.wanted(i) > heldOf(i)) return { type: 'station', i: i, act: 'take' }; }
     for (i = 0; i < 8; i++) {
       st = sh.stations[i]; u = sh.nextFin(i);
@@ -371,6 +402,7 @@ var Fps = (function () {
       if (sh.stations[best].stock > 0) return { type: 'station', i: best, act: 'cook' };
       if (!carry.length) return { type: 'fridge', i: 0, act: 'crate' };
     }
+    if (sh.closing) for (i = 0; i < cs.length; i++) if (cs[i].state === 'ask') return { type: 'cust', i: cs[i].seat, act: 'order' };
     if (!carry.length) for (i = 0; i < sh.seats.length; i++) if (sh.dirt[i]) return { type: 'dirt', i: i, act: 'wipe' };
     return null;
   }
@@ -379,6 +411,7 @@ var Fps = (function () {
     var nm = g.type === 'station' ? GD.STATIONS[g.i].name : '', hd = g.type === 'station' ? sh.stations[g.i].hd : null;
     switch (g.act) {
       case 'order': return 'Un client attend au comptoir : prends sa commande';
+      case 'reg': return 'Caisse : tape ce que demande le client, puis ENCAISSER';
       case 'give': return 'Apporte le plat au client, au comptoir';
       case 'trash': return nm + ' : c’est brûlé, jette-le';
       case 'mid': return nm + ' : ' + low(hd.mid);
@@ -401,9 +434,122 @@ var Fps = (function () {
   // on during the first three days by hand, then only if the player asks for it (pause window)
   function coachOn() { var c = App.save.settings.coach; return !!sh && (c === true || (c !== false && (App.save.stats.simH || 0) < 3)); }
 
+  // ---------------- the register ----------------
+  // E on a customer who wants to order opens the register: the customer says what he wants, the
+  // player types it (keys 1-8 or the buttons) and cashes. He pays the price at once, by card or in
+  // cash (then the right change has to be given back). Time goes on meanwhile, like in a real rush.
+  function sayOrder(c, again) {
+    var cnt = {}, ord = [];
+    c.items.forEach(function (it) { if (!cnt[it.st]) { cnt[it.st] = 0; ord.push(it.st); } cnt[it.st]++; });
+    var parts = ord.map(function (st) { return GD.SAY[GD.STATIONS[st].dish][Math.min(3, cnt[st]) - 1]; });
+    var list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' et ' + parts[parts.length - 1] : parts[0];
+    var T = again ? ['Non… je répète : {l}.', 'Pas tout à fait ! Je voudrais {l}.']
+      : ['Bonjour ! Je voudrais {l}, s’il vous plaît.', 'Pour moi, ce sera {l}.', 'Salut chef ! {L}, s’il vous plaît.', 'Je vais prendre {l}.'];
+    return T[c.id % T.length].replace('{l}', list).replace('{L}', list.charAt(0).toUpperCase() + list.slice(1));
+  }
+  function openPos(c) {
+    if (c.cash == null) c.cash = Math.random() < GD.SIM.cash;
+    c.busy = true;                                // the waiter leaves this customer to the player
+    reg = { c: c, pick: [], stage: 'order', err: 0, say: sayOrder(c, false), closeT: 0, total: sh.orderTotal(c), shake: 0 };
+    P.vx = P.vz = 0; joy.dx = joy.dy = 0; joy.id = -1; look.id = -1;
+    if (E.joy) { E.joy.classList.remove('on'); E.joy.firstChild.style.transform = ''; }
+    if (!touchMode) unlock();                     // the mouse is free to press the keys of the register
+    Sfx.play('order');
+    drawPos(); drawHud();
+  }
+  // noLock: closed with the Escape key. The browser would release the mouse again at once (and the
+  // game would take that for "pause"): the next click on the picture captures it.
+  function closePos(noLock) {
+    if (!reg) return;
+    if (reg.c && reg.c.state === 'ask') reg.c.busy = false;
+    reg = null;
+    if (E.reg) E.reg.className = 'fps-reg';
+    if (noLock !== true && on && !touchMode && !UI.isBlocking()) lock();
+    drawHud();
+  }
+  function posPick(k) {
+    if (!reg || reg.stage !== 'order' || reg.closeT) return;
+    var st = sh.menu[k];
+    if (st == null) return;
+    if (reg.pick.length >= 6) { Sfx.play('nope'); return; }
+    reg.pick.push(st); Sfx.play('tick'); drawPos();
+  }
+  function posUndo() { if (reg && reg.stage === 'order' && reg.pick.length) { reg.pick.pop(); Sfx.play('soft'); drawPos(); } }
+  function posOk() {
+    if (!reg || reg.stage !== 'order' || reg.closeT) return;
+    if (!reg.pick.length) { Sfx.play('nope'); return; }
+    var c = reg.c, want = {}, got = {}, ok = true, k;
+    c.items.forEach(function (it) { want[it.st] = (want[it.st] || 0) + 1; });
+    reg.pick.forEach(function (st) { got[st] = (got[st] || 0) + 1; });
+    for (k in want) if (want[k] !== got[k]) ok = false;
+    for (k in got) if (want[k] !== got[k]) ok = false;
+    if (!ok) {                                    // wrong: the customer says it again
+      reg.err++; reg.pick = []; reg.say = sayOrder(c, true); reg.shake = performance.now();
+      sh.posError(c); drawPos();
+      return;
+    }
+    var bills = [5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000], given = 0;
+    for (k = 0; k < bills.length; k++) if (bills[k] > reg.total) { given = bills[k]; break; }
+    if (c.cash && given) {
+      // cash: three amounts, only one is the right change
+      var ch = given - reg.total, d = given >= 1000 ? 100 : given >= 100 ? 10 : given >= 20 ? 2 : 1;
+      var o = [ch, ch + d, ch - d > 0 ? ch - d : ch + 2 * d];
+      for (k = 2; k > 0; k--) { var j = Math.floor(Math.random() * (k + 1)), t = o[k]; o[k] = o[j]; o[j] = t; }
+      reg.stage = 'cash'; reg.given = given; reg.change = ch; reg.opts = o;
+      reg.say = 'Je paie en espèces : voilà ' + given + ' pièces.';
+      Sfx.play('pop'); drawPos();
+    } else posDone(1, 'Je paie par carte… bip ! Merci.');
+  }
+  function posChange(k) {
+    if (!reg || reg.stage !== 'cash' || reg.closeT || k < 0 || k >= reg.opts.length) return;
+    var good = reg.opts[k] === reg.change;
+    if (!good) Sfx.play('nope');
+    posDone(good ? GD.SIM.changeGood : GD.SIM.changeBad, good ? 'Le compte est bon, merci !' : 'Hmm… ce n’est pas la bonne monnaie.');
+  }
+  function posDone(tipK, msg) {
+    var c = reg.c;
+    reg.stage = 'done'; reg.say = msg; reg.closeT = 0.8;
+    sh.takeOrder(c, 'player', tipK);
+    drawPos();
+  }
+  // (test robots) types the right order and gives the right change
+  function posSolve() {
+    if (!reg) return false;
+    if (reg.stage === 'order') { reg.pick = reg.c.items.map(function (it) { return it.st; }); posOk(); }
+    if (reg && reg.stage === 'cash') posChange(reg.opts.indexOf(reg.change));
+    return true;
+  }
+  function drawPos() {
+    if (!E.reg || !reg) return;
+    var c = reg.c, i, coin = '<img class="coin" src="' + Art.coin() + '">';
+    var h = '<div class="reg-say"><b style="background-image:var(--a-cu_' + c.animal + '_neutral)"></b><span>« ' + reg.say + ' »</span></div>';
+    if (reg.stage === 'order') {
+      h += '<div class="reg-grid">';
+      for (i = 0; i < sh.menu.length; i++) {
+        var d = GD.STATIONS[sh.menu[i]];
+        h += '<div class="reg-key" data-a="k' + i + '"><em>' + (i + 1) + '</em><i style="background-image:' + Art.dishBg(d.dish) + '"></i><span>' + d.dishName + '</span></div>';
+      }
+      h += '</div>';
+      var cnt = {}, ord = [], tot = 0;
+      reg.pick.forEach(function (st) { if (!cnt[st]) { cnt[st] = 0; ord.push(st); } cnt[st]++; tot += sh.stations[st].price; });
+      if (c.vip) tot *= 2;
+      h += '<div class="reg-ticket"><div class="reg-items">' + (ord.length ? ord.map(function (st) {
+        return '<u><i style="background-image:' + Art.dishBg(GD.STATIONS[st].dish) + '"></i>×' + cnt[st] + '</u>';
+      }).join('') : '<s>Tape la commande du client…</s>') + '</div><div class="reg-total">' + Math.round(tot) + ' ' + coin + '</div></div>';
+      h += '<div class="reg-acts"><div class="reg-btn x" data-a="x">✕</div><div class="reg-btn clear" data-a="u">⌫ Effacer</div>' +
+        '<div class="reg-btn ok' + (reg.pick.length ? '' : ' off') + '" data-a="ok">ENCAISSER<em>Entrée</em></div></div>';
+    } else if (reg.stage === 'cash') {
+      h += '<div class="reg-cash">Total : <b>' + reg.total + '</b> ' + coin + ' &nbsp;•&nbsp; Reçu : <b>' + reg.given + '</b> ' + coin + '<br>Combien lui rends-tu ?</div><div class="reg-grid cash">';
+      for (i = 0; i < reg.opts.length; i++) h += '<div class="reg-key cashk" data-a="c' + i + '"><em>' + (i + 1) + '</em><span>' + reg.opts[i] + '</span></div>';
+      h += '</div>';
+    } else h += '<div class="reg-cash done">✔ Commande enregistrée : ' + reg.total + ' ' + coin + '</div>';
+    E.reg.innerHTML = h;
+    E.reg.className = 'fps-reg on' + (touchMode ? ' touch' : '') + (reg.shake && performance.now() - reg.shake < 400 ? ' err' : '');
+  }
+
   // ---------------- act ----------------
   function interact() {
-    if (!on || !sh || sh.over || Game.isPaused()) return;
+    if (!on || !sh || sh.over || Game.isPaused() || reg) return;
     if (!target) return;
     var d = describe(), i = target.i;
     if (!d.can) { if (d.txt) { Sfx.play('nope'); if (d.empty) UI.toast('Le frigo est au bout de la cuisine, à droite du comptoir.'); } return; }
@@ -427,7 +573,7 @@ var Fps = (function () {
     } else if (target.type === 'dirt') sh.wipe(i, 'player');
     else {
       var c = target.obj, given = 0;
-      if (d.act === 'order') sh.takeOrder(c, 'player');
+      if (d.act === 'order') { openPos(c); return; }
       else {
         for (var j = carry.length - 1; j >= 0; j--) {
           if (sh.giveDish(c, carry[j].st)) { carry.splice(j, 1); given++; if (c.state !== 'wait') break; }
@@ -454,6 +600,7 @@ var Fps = (function () {
   }
   function drawHud() {
     if (!hud) return;
+    if (hud._pos !== !!reg) { hud._pos = !!reg; hud.classList.toggle('posing', !!reg); }
     var d = describe();
     var key = touchMode ? '' : '<i class="key wide-key">E</i> ';
     var html = d.txt ? (d.can ? key : '') + d.txt : '';
@@ -516,9 +663,10 @@ var Fps = (function () {
   return {
     start: start, stop: stop, update: update, cam: cam, key: key, interact: interact, tapStation: tapStation, handsPos: handsPos,
     active: function () { return on; }, isFree: function () { return on && free; }, carrying: function () { return carry.length; },
-    relock: function () { if (on && !touchMode && !locked && !UI.isBlocking()) lock(); },
+    relock: function () { if (on && !touchMode && !locked && !UI.isBlocking() && !reg) lock(); },
+    posOpen: function () { return !!reg; }, posClose: function () { closePos(true); },
     FRIDGE: FRIDGE, place: place, coachOn: coachOn, abort: abort,
     _p: P, _target: function () { return target; }, _describe: describe, _carry: function () { return carry; }, _crate: function () { return crate; },
-    _pos: pos, _aim: aim, _plan: plan
+    _pos: pos, _aim: aim, _plan: plan, _reg: function () { return reg; }, _posSolve: posSolve
   };
 })();

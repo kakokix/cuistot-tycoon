@@ -212,7 +212,7 @@ var UI = (function () {
     var lines = '';
     lines += '<div class="lg" style="font-size:32px;color:#6b3a14;margin-bottom:6px">JOUR ' + sh.day + (win ? ' RÉUSSI !' : '') + '</div>';
     lines += 'Gains : <b>' + fmt(sh.earned) + '</b> ' + COIN() + ' <span style="opacity:.75">(objectif ' + fmt(sh.goal) + ')</span><br>';
-    lines += 'Clients servis : <b>' + sh.served + '</b>' + (sh.lost ? ' • partis fâchés : <b>' + sh.lost + '</b>' : sh.burnt ? ' • plats brûlés : <b>' + sh.burnt + '</b>' : '') + '<br>';
+    lines += 'Clients servis : <b>' + sh.served + '</b>' + (sh.lost ? ' • partis fâchés : <b>' + sh.lost + '</b>' : sh.refunds ? ' • remboursés : <b>' + sh.refunds + '</b>' : sh.burnt ? ' • plats brûlés : <b>' + sh.burnt + '</b>' : '') + '<br>';
     if (sh.tips) lines += 'Pourboires : <b>' + fmt(sh.tips) + '</b> ' + COIN() + (sh.vips ? ' • VIP : <b>' + sh.vips + '</b>' : '') + '<br>';
     lines += 'Expérience : <b>+' + res.xpGain + ' XP</b>';
     if (res.bonus) lines += '<br>Bonus étoiles : <b>+' + fmt(res.bonus) + '</b> ' + COIN();
@@ -709,7 +709,7 @@ var UI = (function () {
     var h = '<div class="lg" style="font-size:27px;color:#6b3a14;margin-bottom:8px">Tu es dans la cuisine !</div>';
     rows.forEach(function (r) { h += '<div style="margin:0 0 5px"><b class="lg" style="font-size:21px;color:#2f8a17">' + r[0] + '</b> : ' + r[1] + '</div>'; });
     h += '<div style="margin-top:10px;border-top:3px dashed rgba(107,58,20,.3);padding-top:10px">' +
-      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">1. La commande</b><br>Va au comptoir et vise le client qui a un « ? ».</div>' +
+      '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">1. La caisse</b><br>Va au comptoir, vise le client qui a un « ? » et tape sa commande. Il paie tout de suite, mais il est remboursé s’il n’est pas servi !</div>' +
       '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">2. La cuisine</b><br>Chaque station a ses gestes : poser le steak, le retourner, monter le burger… Le message au milieu de l’écran te dit quoi faire.</div>' +
       '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">3. Le service</b><br>Prends les plats (3 au plus) et apporte-les au client.</div>' +
       '<div style="margin:0 0 7px"><b class="lg" style="color:#c2571a">4. Le reste</b><br>Station vide ? Une caisse t’attend au <b>frigo</b>. Des miettes ? Essuie le comptoir.</div>' +

@@ -35,31 +35,42 @@ window.T = {
     return 'profile of day ' + p[0];
   },
   // ---- simulator robots ----
+  // The robots play many seconds of game in one go: the browser then tells about the mouse (captured,
+  // released) long afterwards and all at once, and the game takes it for the Esc key (pause). So the
+  // robots play without capturing the mouse.
+  _nomouse: function (off) { var r = document.getElementById('screen-game'); if (off) r.requestPointerLock = null; else delete r.requestPointerLock; },
   // what a sensible player would go and do next (the same advice as the coach of the first days)
   _plan: function () { return Fps._plan(); },
   // where to stand to do it
   _stand: function (g) {
-    var p = Fps._pos(g.type, g.i);
-    if (g.type === 'station') return { x: p.x, z: 2.9, t: p };
-    if (g.type === 'fridge') return { x: 5.6, z: 3.0, t: p };
-    return { x: p.x, z: g.type === 'dirt' ? 1.5 : 1.4, t: p };
+    var p = Fps._pos(g.type, g.i), s;
+    if (g.type === 'station') s = { x: p.x, z: 2.9, t: p };
+    else if (g.type === 'fridge') s = { x: 5.6, z: 3.0, t: p };
+    else s = { x: p.x, z: g.type === 'dirt' ? 1.5 : 1.4, t: p };
+    // stay inside the walls: on a 16:9 screen the kitchen is narrower and the walking robot never
+    // reached x = 5.6 (it then pushed against the wall next to the fridge until the end of the day)
+    var hl = View3D.metrics().pitch * 4 + 0.75 - 0.02;
+    s.x = Math.max(-hl, Math.min(hl, s.x));
+    return s;
   },
   _look: function (P, t) { var dx = t.x - P.x, dz = t.z - P.z, dy = t.y - 2.15; P.yaw = Math.atan2(-dx, -dz); P.pitch = Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)); },
   // plays a day in the first-person simulator, jumping from one thing to the next (fast: one gesture every 0.25 s)
   fpbot: function (sec) {
     var sh = Game.shift(); if (!sh || !Fps.active()) return 'no simulator day';
+    T._nomouse(true);
     var frame = View3D.frame, n = 0, P = Fps._p, acts = {}, pend = false, step = 0;
     View3D.frame = function (dt) { if (++n % 60 === 0) frame(dt); };
     try {
       for (var t = 0; t < sec && !sh.over; t += 0.05) {
         Game.update(0.05); step++;
+        if (Fps._reg()) { if (!Fps._reg().closeT) Fps._posSolve(); continue; }
         if (pend) { var d = Fps._describe(); if (d.can) { acts[d.act] = (acts[d.act] || 0) + 1; Fps.interact(); } else acts.miss = (acts.miss || 0) + 1; pend = false; continue; }
         if (step % 5) continue;
         var g = T._plan(sh);
         if (!g) continue;
         var s = T._stand(g); P.x = s.x; P.z = s.z; P.vx = P.vz = 0; T._look(P, s.t); pend = true;
       }
-    } finally { View3D.frame = frame; }
+    } finally { View3D.frame = frame; T._nomouse(false); }
     frame(0.016);
     return 'earned ' + Math.round(sh.earned) + '/' + sh.goal + ' t=' + Math.round(sh.timeLeft) + ' over=' + sh.over + ' ' + JSON.stringify(acts);
   },
@@ -67,11 +78,19 @@ window.T = {
   // skill: seconds to aim at something new (0.35 = good player, 0.8 = beginner)
   fpwalk: function (sec, skill) {
     var sh = Game.shift(); if (!sh || !Fps.active()) return 'no simulator day';
-    var frame = View3D.frame, n = 0, P = Fps._p, acts = {}, goal = null, wait = 0, last = '', aim = skill || 0.35;
+    T._nomouse(true);
+    var frame = View3D.frame, n = 0, P = Fps._p, acts = {}, goal = null, wait = 0, last = '', aim = skill || 0.35, regT = null;
     View3D.frame = function (dt) { if (++n % 60 === 0) frame(dt); };
     try {
       for (var t = 0; t < sec && !sh.over; t += 0.05) {
         Game.update(0.05);
+        if (Fps._reg()) {                     // at the register: typing the order takes a moment
+          if (Fps._reg().closeT) continue;
+          if (regT == null) regT = aim * 3 + 0.9;
+          regT -= 0.05;
+          if (regT <= 0) { Fps._posSolve(); regT = null; acts.reg = (acts.reg || 0) + 1; }
+          continue;
+        }
         if (!goal) {
           var g = T._plan(sh);
           if (!g) continue;
@@ -85,7 +104,7 @@ window.T = {
         var ds = Fps._describe(); if (ds.can) { acts[ds.act] = (acts[ds.act] || 0) + 1; Fps.interact(); } else acts.miss = (acts.miss || 0) + 1;
         last = goal.key; goal = null;
       }
-    } finally { View3D.frame = frame; }
+    } finally { View3D.frame = frame; T._nomouse(false); }
     frame(0.016);
     return 'earned ' + Math.round(sh.earned) + '/' + sh.goal + ' (3 stars ' + sh.thresholds[2] + ', potential ' + Math.round(sh.potential) + ' -> ' + Math.round(100 * sh.earned / sh.potential) + ' %) t=' + Math.round(sh.timeLeft) + ' served=' + sh.served + ' lost=' + sh.lost + ' stars=' + (sh.over ? sh.stars : '?') + ' ' + JSON.stringify(acts);
   },

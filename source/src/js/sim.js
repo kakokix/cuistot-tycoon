@@ -24,7 +24,8 @@ var Shift = (function () {
     this.t = 0;
     this.earned = 0; this.tips = 0; this.served = 0; this.lost = 0; this.xp = 0; this.vips = 0;
     this.dishes = [0, 0, 0, 0, 0, 0, 0, 0]; this.boostUsed = 0;      // counted for the missions of the day
-    this.orders = 0; this.burnt = 0; this.wiped = 0; this.restocks = 0;
+    this.orders = 0; this.burnt = 0; this.wiped = 0; this.restocks = 0; this.posErr = 0;
+    this.refunds = 0; this.refunded = 0;        // simulator: orders paid at the register and never served
     // simulator: the rush of the middle of the day (customers come faster for a moment)
     this.rush = 0; this.rushDone = false;
     this.rushAt = simPace && day >= SIM.rush.day ? this.duration * SIM.rush.at : -1;
@@ -52,7 +53,7 @@ var Shift = (function () {
       this.potential = secs / iv * items * price * 1.2 * (1 + cf.vip);
       var g0 = this.potential * SIM.goal * (this.relax ? 1 : SIM.goalClassic), mag = g0 < 200 ? 5 : g0 < 1000 ? 10 : 50;
       this.goal = Math.max(10, Math.round(g0 / mag) * mag);
-      this.thresholds = [this.goal, Math.round(this.goal * 1.35 / mag) * mag, Math.round(this.goal * 1.75 / mag) * mag];
+      this.thresholds = [this.goal, Math.round(this.goal * SIM.stars[0] / mag) * mag, Math.round(this.goal * SIM.stars[1] / mag) * mag];
     }
     this.seats = []; var n = GDx.seatsFor(save); for (var k = 0; k < n; k++) this.seats.push(null);
     this.dirt = this.seats.map(function () { return false; });       // crumbs left on the counter (simulator)
@@ -160,6 +161,7 @@ var Shift = (function () {
           c.patience = 0; c.state = 'out'; c.stateT = 0; c.happy = false;
           this.lost++; this.hearts--; this.save.stats.lost++;
           this.emit('angry', { c: c });
+          this.refund(c);
           if (this.hearts <= 0) { this.end('hearts'); return; }
         }
       } else if (c.state === 'out') {
@@ -231,7 +233,7 @@ var Shift = (function () {
         for (i = 0; i < this.stations.length && !did; i++) if (this.stations[i].ready > 0 && this.serveFrom(i, null, 'serveur')) did = true;
         // he takes the orders nobody took and, from level 2, wipes the free places
         var wait = SIM.waiterAsk[lv.serveur - 1];
-        for (i = 0; i < this.customers.length && !did; i++) { c = this.customers[i]; if (c.state === 'ask' && c.stateT >= wait) did = this.takeOrder(c, 'serveur'); }
+        for (i = 0; i < this.customers.length && !did; i++) { c = this.customers[i]; if (c.state === 'ask' && !c.busy && c.stateT >= wait) did = this.takeOrder(c, 'serveur'); }
         if (lv.serveur >= 2) for (i = 0; i < this.seats.length && !did; i++) if (this.dirt[i] && !this.seats[i]) did = this.wipe(i, 'serveur');
         this.staffT.serveur = did ? S.serveur.interval[lv.serveur - 1] * SIM.staffPace : 0.25;
       }
@@ -377,12 +379,42 @@ var Shift = (function () {
     this.emit('restock', { st: st, by: by || 'chef' });
     return true;
   };
-  P.takeOrder = function (c, by) {
+  // what the order costs (the price on the register)
+  P.orderTotal = function (c) {
+    var base = 0;
+    for (var i = 0; i < c.items.length; i++) base += this.stations[c.items[i].st].price;
+    return Math.round(base * (c.vip ? 2 : 1));
+  };
+  // The order is typed on the register: the customer pays its price at once (the tip comes when he
+  // is served). tipK: bonus or penalty on the tip (the right change was given back, or not).
+  P.takeOrder = function (c, by, tipK) {
     if (this.over || !c || c.state !== 'ask') return false;
-    c.state = 'wait'; c.stateT = 0; this.orders++;
+    c.state = 'wait'; c.stateT = 0; c.busy = false; this.orders++;
+    if (tipK) c.tipK = tipK;
     if (by !== 'serveur') this.save.stats.orders = (this.save.stats.orders || 0) + 1;
+    c.paid0 = this.orderTotal(c);
+    this.earned += c.paid0; this.save.coins += c.paid0; this.save.stats.earned += c.paid0;
     this.emit('order', { c: c, by: by || 'player' });
+    this.emit('prepay', { c: c, amount: c.paid0, by: by || 'player' });
     return true;
+  };
+  // simulator: a customer who paid at the register and leaves without his order gets his money back
+  // (he leaves angry, or the day ends). So the money only counts once the order is served.
+  P.refund = function (c) {
+    if (!c || !c.paid0) return 0;
+    var a = c.paid0; c.paid0 = 0;
+    this.earned -= a; this.refunds++; this.refunded += a;
+    this.save.coins = Math.max(0, this.save.coins - a);
+    this.save.stats.earned = Math.max(0, this.save.stats.earned - a);
+    this.emit('refund', { c: c, amount: a });
+    return a;
+  };
+  // a wrong order was typed: the customer says it again, a little less patient
+  P.posError = function (c) {
+    if (this.over || !c || c.state !== 'ask') return;
+    c.patience = Math.max(0, c.patience - c.maxPatience * GDx.SIM.posPenalty);
+    this.posErr++; c.posErrs = (c.posErrs || 0) + 1;
+    this.emit('poserr', { c: c });
   };
   P.wipe = function (seat, by) {
     if (this.over || !this.dirt[seat]) return false;
@@ -447,18 +479,22 @@ var Shift = (function () {
     var pf = Math.max(0, Math.min(1, c.patience / c.maxPatience));
     var tipMul = (1 + 0.2 * (this.save.decor.lanternes || 0)) * (this.boost.chance > 0 ? 3 : 1) *
       (this.relax ? 1 + 0.1 * (this.save.staff.serveur || 0) : 1);   // Détente: the waiter brings bigger tips
-    var tip = base * 0.3 * pf * tipMul * (c.dirty ? 0.5 : 1);        // a dirty counter: half the tip
+    // simulator: the right order at the first try, the right change, a clean counter, served in good time
+    var perfect = this.manual && !c.posErrs && (c.tipK || 1) >= 1 && pf >= 0.5 && !c.dirty;
+    var tip = base * 0.3 * pf * tipMul * (c.dirty ? 0.5 : 1) * (c.tipK || 1) * (perfect ? 1.1 : 1);   // a dirty counter: half the tip
     var mul = c.vip ? 2 : 1;
     var total = Math.round((base + tip) * mul);
     tip = Math.round(tip * mul);
+    var pre = c.paid0 || 0, due = total - pre;   // simulator: the price was paid at the register, the tip comes now
+    c.paid0 = 0;                                 // served: nothing to give back any more
     c.pay = total; c.tip = tip; c.happy = true;
     c.state = 'out'; c.stateT = 0;
-    this.earned += total; this.tips += tip; this.served++;
+    this.earned += due; this.tips += tip; this.served++;
     var xp = (3 + 2 * c.items.length) * mul;
     this.xp += xp;
     // (the daily challenge runs on a temporary save: nothing of it reaches the real one)
-    this.save.coins += total;
-    this.save.stats.served++; this.save.stats.earned += total;
+    this.save.coins += due;
+    this.save.stats.served++; this.save.stats.earned += due;
     if (c.vip) { this.vips++; this.save.stats.vip = (this.save.stats.vip || 0) + 1; }
     // friendship: +1 per visit, +1 more when their favourite dish was on the order
     var who = GDx.PEOPLE[c.animal], fav = false, met = GDx.introduced(this.save, c.animal);
@@ -466,7 +502,7 @@ var Shift = (function () {
     if (!this.save.friends) this.save.friends = {};
     var before = this.save.friends[c.animal] || 0, after = before + (met ? 1 + (fav ? 1 : 0) : 0);
     this.save.friends[c.animal] = after;
-    this.emit('pay', { c: c, amount: total, tip: tip, xp: xp, fav: fav && met });
+    this.emit('pay', { c: c, amount: due, tip: tip, xp: xp, fav: fav && met, prepaid: pre > 0, perfect: perfect });
     var lv = GDx.friendLevel(after);
     if (lv > GDx.friendLevel(before)) this.emit('friend', { c: c, who: c.animal, level: lv });
     // simulator: some customers leave crumbs behind them
@@ -565,6 +601,7 @@ var Shift = (function () {
   P.end = function (reason) {
     if (this.over) return;
     this.over = true; this.endReason = reason;
+    for (var k = 0; k < this.customers.length; k++) this.refund(this.customers[k]);   // paid and not served
     var s = 0;
     for (var i = 0; i < 3; i++) if (this.earned >= this.thresholds[i]) s = i + 1;
     if (reason === 'hearts' && !this.relax) s = 0;

@@ -783,14 +783,30 @@ var Scene = (function () {
           Vib.buzz(15);
           break;
         }
+        case 'prepay':                      // simulator: the order is paid at the register
+          p = custPos(e.c);
+          if (!p.hidden) { ftext(p.x, p.y - 40, '+' + fmt(e.amount)); flyCoins(p.x, p.y, Math.min(6, 2 + Math.floor(e.amount / 25))); }
+          Sfx.play('coin');
+          updateGoal();
+          break;
+        case 'refund':                      // paid at the register, never served: the money goes back
+          p = custPos(e.c);
+          if (!p.hidden && !sh.over) ftext(p.x, p.y - 112, 'Remboursé −' + fmt(e.amount), 'say bad');
+          updateGoal(true);
+          break;
+        case 'poserr':
+          p = custPos(e.c);
+          if (!p.hidden) ftext(p.x, p.y - 150, 'Non, ce n’est pas ça !', 'say');
+          Sfx.play('nope'); Vib.buzz(30);
+          break;
         case 'pay':
           p = custPos(e.c);
-          ftext(p.x, p.y - 40, '+' + fmt(e.amount));
+          if (e.amount > 0) ftext(p.x, p.y - 40, '+' + fmt(e.amount) + (e.prepaid ? ' pourboire' : ''));
           var pr = e.c.patience / e.c.maxPatience;
-          ftext(p.x, p.y - 96, e.c.vip ? 'Excellent ! ×2' : e.fav ? 'Mon plat préféré !' : pr >= 0.4 ? pick(YUM) : (sh.relax ? 'Merci !' : 'Enfin…'), 'say');
-          flyCoins(p.x, p.y, Math.min(6, 2 + Math.floor(e.amount / 25)));
+          ftext(p.x, p.y - 96, e.c.vip ? 'Excellent ! ×2' : e.fav ? 'Mon plat préféré !' : e.perfect ? 'Service parfait !' : pr >= 0.4 ? pick(YUM) : (sh.relax ? 'Merci !' : 'Enfin…'), 'say');
+          if (e.amount > 0) flyCoins(p.x, p.y, Math.min(6, 2 + Math.floor(e.amount / 25)));
           hearts(p.x, p.y - 10);
-          Sfx.play('coin');
+          Sfx.play(e.amount > 0 ? 'coin' : 'soft');
           updateGoal();
           Tuto.onAction('pay', e.c);
           break;
@@ -809,7 +825,7 @@ var Scene = (function () {
           if (e.id === 'temps') ftext(L.timerX, isWide() ? 130 : 120, '+15 s', 'wtxt');
           refreshBoosters();
           break;
-        case 'closing': UI.toast('Dernières commandes : on termine les plats en cours !'); break;
+        case 'closing': UI.toast(sh.manual ? 'On ferme ! Sers vite ceux qui ont payé.' : 'Dernières commandes : on termine les plats en cours !'); break;
         case 'friend':
           if (Story.TALES[e.who]) {
             p = custPos(e.c);
